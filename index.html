@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>我们的故事</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- 1920×1080 固定舞台，等比缩放适配投屏 -->
+  <div class="stage" id="stage">
+
+    <!-- 背景层：双层交叉淡入 -->
+    <div class="layer-bg" id="layerBg">
+      <img class="bg-img bg-img-a" id="bgA" alt="">
+      <img class="bg-img bg-img-b" id="bgB" alt="">
+    </div>
+
+    <!-- 立绘层：左/中/右三槽 -->
+    <div class="layer-chars" id="layerChars">
+      <div class="char-slot char-slot--left" id="charLeft"></div>
+      <div class="char-slot char-slot--center" id="charCenter"></div>
+      <div class="char-slot char-slot--right" id="charRight"></div>
+    </div>
+
+    <!-- 粒子层 -->
+    <canvas class="layer-particles" id="particles" width="1920" height="1080"></canvas>
+
+    <!-- 对话框层 -->
+    <div class="layer-dialogue" id="layerDialogue">
+      <div class="dialogue-box" id="dialogueBox">
+        <div class="name-tag" id="nameTag"></div>
+        <div class="text" id="dialogueText"></div>
+        <div class="arrow" id="dialogueArrow">▼</div>
+      </div>
+    </div>
+
+    <!-- 选项菜单层 -->
+    <div class="layer-menu" id="layerMenu">
+      <div class="choice-panel" id="choicePanel">
+        <div class="choice-prompt" id="choicePrompt"></div>
+        <div class="choice-list" id="choiceList"></div>
+      </div>
+    </div>
+
+    <!-- 全屏特效层 -->
+    <div class="layer-effects" id="layerEffects">
+      <div class="effect-flash" id="effectFlash"></div>
+      <div class="effect-spotlight" id="effectSpotlight"></div>
+    </div>
+
+    <!-- HUD 层：静音按钮 -->
+    <div class="layer-hud" id="layerHud">
+      <button class="hud-btn" id="muteBtn" title="静音切换" aria-label="静音切换">♪</button>
+    </div>
+
+    <!-- 蒙太奇层 -->
+    <div class="layer-montage" id="layerMontage">
+      <div class="montage-img" id="montageImg"></div>
+      <div class="montage-caption" id="montageCaption"></div>
+    </div>
+
+    <!-- 小游戏层 -->
+    <div class="layer-minigame" id="layerMinigame">
+      <div class="mg-wrap">
+        <canvas id="minigameCanvas" width="1280" height="720"></canvas>
+        <div class="mg-hud">
+          <div class="mg-cap-bar"><div class="mg-cap-fill" id="mgCapFill"></div><div class="mg-cap-ticks"><span></span><span></span><span></span><span></span></div></div>
+          <div class="mg-hp-bar"><div class="mg-hp-fill" id="mgHpFill"></div></div>
+          <div class="mg-timer" id="mgTimer">60</div>
+          <div class="mg-healer" id="mgHealer"><div class="mg-healer-cd" id="mgHealerCd"></div></div>
+          <div class="mg-floats" id="mgFloats"></div>
+          <div class="mg-result" id="mgResult"></div>
+        </div>
+        <button class="mg-skip" id="mgSkip">跳过 ▶</button>
+        <div class="mg-hint" id="mgHint">WASD 移动 · 鼠标瞄准/左键射击</div>
+      </div>
+    </div>
+
+    <!-- 求婚层 -->
+    <div class="layer-proposal" id="layerProposal">
+      <div class="ring-wrap" id="ringWrap">
+        <svg class="ring" viewBox="0 0 200 200" width="280" height="280">
+          <defs>
+            <radialGradient id="ringGrad" cx="50%" cy="40%" r="60%">
+              <stop offset="0%" stop-color="#FFF8E0"/>
+              <stop offset="55%" stop-color="#FFD700"/>
+              <stop offset="100%" stop-color="#B8860B"/>
+            </radialGradient>
+            <linearGradient id="ringShine" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#fff" stop-opacity="0.9"/>
+              <stop offset="50%" stop-color="#fff" stop-opacity="0.2"/>
+              <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <circle cx="100" cy="100" r="68" fill="none" stroke="url(#ringGrad)" stroke-width="14"/>
+          <circle cx="100" cy="100" r="68" fill="none" stroke="url(#ringShine)" stroke-width="6" opacity="0.7"/>
+          <circle cx="100" cy="42" r="14" fill="url(#ringGrad)"/>
+          <polygon points="100,28 108,42 100,56 92,42" fill="#FFF8E0" opacity="0.9"/>
+          <polygon points="78,42 100,32 122,42 100,52" fill="#FFFFFF" opacity="0.5"/>
+        </svg>
+        <div class="ring-glow" id="ringGlow"></div>
+      </div>
+      <div class="proposal-text" id="proposalText">嫁给我，好吗？</div>
+      <div class="proposal-btns" id="proposalBtns">
+        <button class="btn-accept" id="btnAccept" autofocus>我愿意 ♥</button>
+        <button class="btn-reject" id="btnReject">让我想想…</button>
+      </div>
+      <div class="reject-tip" id="rejectTip"></div>
+    </div>
+
+    <!-- 结尾画面层 -->
+    <div class="layer-ending" id="layerEnding">
+      <div class="ending-content">
+        <div class="ending-big" id="endingBig">她说好！</div>
+        <div class="ending-sub" id="endingSub">THE ANSWER IS YES</div>
+        <div class="ending-meta" id="endingMeta"></div>
+        <div class="ending-restart" id="endingRestart">按任意键重新开始</div>
+      </div>
+    </div>
+
+    <!-- 开始界面层 -->
+    <div class="layer-start" id="layerStart">
+      <div class="start-screen">
+        <div class="start-deco"></div>
+        <h1 class="start-title" id="startTitle">我们的故事</h1>
+        <div class="start-sub" id="startSub">A Story of Us</div>
+        <button class="start-btn" id="startBtn">点击开始</button>
+        <div class="start-tip">建议全屏投屏观看 · 戴上耳机效果更佳</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 加载顺序：数据 → 音频 → 小游戏 → 引擎 -->
+  <script src="js/storyData.js?v=2"></script>
+  <script src="js/audio.js?v=2"></script>
+  <script src="js/minigame.js?v=2"></script>
+  <script src="js/engine.js?v=2"></script>
+</body>
+</html>
