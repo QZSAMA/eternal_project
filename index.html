@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>我们的故事</title>
-  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/style.css?v=3">
 </head>
 <body>
   <!-- 1920×1080 固定舞台，等比缩放适配投屏 -->
@@ -60,20 +60,19 @@
       <div class="montage-caption" id="montageCaption"></div>
     </div>
 
-    <!-- 小游戏层 -->
+    <!-- 小游戏层：逆转的奶 -->
     <div class="layer-minigame" id="layerMinigame">
       <div class="mg-wrap">
         <canvas id="minigameCanvas" width="1280" height="720"></canvas>
         <div class="mg-hud">
-          <div class="mg-cap-bar"><div class="mg-cap-fill" id="mgCapFill"></div><div class="mg-cap-ticks"><span></span><span></span><span></span><span></span></div></div>
           <div class="mg-hp-bar"><div class="mg-hp-fill" id="mgHpFill"></div></div>
-          <div class="mg-timer" id="mgTimer">60</div>
-          <div class="mg-healer" id="mgHealer"><div class="mg-healer-cd" id="mgHealerCd"></div></div>
+          <div class="mg-hp-label">小美血量</div>
+          <div class="mg-timer" id="mgTimer">90</div>
           <div class="mg-floats" id="mgFloats"></div>
           <div class="mg-result" id="mgResult"></div>
         </div>
         <button class="mg-skip" id="mgSkip">跳过 ▶</button>
-        <div class="mg-hint" id="mgHint">WASD 移动 · 鼠标瞄准/左键射击</div>
+        <div class="mg-hint" id="mgHint">左键 紫球 · 右键 黄球 · 按 E 让球反方向飞回</div>
       </div>
     </div>
 
@@ -133,9 +132,9 @@
   </div>
 
   <!-- 加载顺序：数据 → 音频 → 小游戏 → 引擎 -->
-  <script src="js/storyData.js?v=2"></script>
-  <script src="js/audio.js?v=2"></script>
-  <script src="js/minigame.js?v=2"></script>
-  <script src="js/engine.js?v=2"></script>
+  <script src="js/storyData.js?v=3"></script>
+  <script src="js/audio.js?v=3"></script>
+  <script src="js/minigame.js?v=3"></script>
+  <script src="js/engine.js?v=3"></script>
 </body>
 </html>

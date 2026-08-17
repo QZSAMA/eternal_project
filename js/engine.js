@@ -239,14 +239,16 @@ const Engine = {
       }
     }
 
-    // 名牌
+    // 名牌：say.name 可覆盖默认 ID（用于"名字从 ID 到真名"的转折）
     if (who === "narration") {
       this.dom.dialogueBox.classList.add("is-narration");
       this.dom.nameTag.style.display = "none";
     } else {
       this.dom.dialogueBox.classList.remove("is-narration");
       this.dom.nameTag.style.display = "block";
-      this.dom.nameTag.textContent = who === "hero" ? this.data.meta.heroName.replace(/[{}]/g, "") : this.data.meta.heroineName.replace(/[{}]/g, "");
+      const defaultName = who === "hero" ? this.data.meta.heroName : who === "heroine" ? this.data.meta.heroineName : "";
+      const displayName = (arg.name || defaultName).replace(/[{}]/g, "");
+      this.dom.nameTag.textContent = displayName;
       this.dom.nameTag.className = "name-tag is-" + who;
     }
 

@@ -263,11 +263,15 @@ html,body{
 .mg-cap-ticks span{width:2px;background:rgba(255,255,255,.3);}
 .mg-hp-bar{
   position:absolute;left:24px;bottom:24px;width:280px;height:24px;
-  background:rgba(10,15,25,.8);border:1px solid var(--warn-red);
+  background:rgba(10,15,25,.8);border:1px solid var(--ow-cyan);
 }
 .mg-hp-fill{
-  height:100%;width:100%;background:linear-gradient(90deg,#E44040,#FF6B6B);
+  height:100%;width:100%;background:linear-gradient(90deg,#4FC3F7,#9AC);
   transition:width 200ms ease-out;
+}
+.mg-hp-label{
+  position:absolute;left:24px;bottom:50px;font-size:18px;color:var(--ow-cyan);
+  letter-spacing:2px;text-shadow:0 0 8px rgba(79,195,247,.6);
 }
 .mg-timer{
   position:absolute;right:24px;bottom:24px;
