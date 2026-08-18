@@ -1,46 +1,50 @@
 /* ============================================
-   逆转的奶 · Mini 小游戏
-   机制：莫伊拉丢紫球(打敌人) / 黄球(奶)
-        小美永远在莫伊拉身后，黄球打不到
-        唯一解：丢黄球后按 E 让球反向飞回 → 奶到她
-        通关后揭示真名：QzSama → 赵启志 / 可乐就是好喝 → 朱盈畅
-   Canvas 2D + requestAnimationFrame，零依赖
+   逆转的奶 · 3D 版（Three.js）
+   机制不变：
+     - 玩家=莫伊拉，第一/第三人称俯视
+     - 小美永远在莫伊拉身后（朝向反方向）
+     - 左键紫球(打敌人) / 右键黄球(奶)
+     - 黄球直直朝前飞，打不到身后的她
+     - 按 E 让球反方向飞回 → 奶到小美 → 通关揭示真名
+   视觉：3D 场景，发光球体材质，粒子拖尾
+   依赖：全局 THREE（由 index.html CDN 加载）
    ============================================ */
 
 const Minigame = {
-  canvas: null,
-  ctx: null,
   cfg: null,
   onEnd: null,
-  running: false,
-  RAF: null,
-
-  // 游戏状态
-  player: null,
-  mei: null,
+  scene: null,
+  camera: null,
+  renderer: null,
+  player: null,        // 玩家 mesh
+  playerGroup: null,   // 玩家朝向组（球+瞄准锥）
+  mei: null,           // 小美 mesh
   enemies: [],
   orbs: [],
   particles: [],
-  timeLeft: 0,
+  trails: [],
+  orbTextures: { purple: null, yellow: null },
+  state: null,
+  keys: {},
+  mouse: { x: 0, y: 0, nx: 0, ny: 0, leftDown: false, rightDown: false },
+  startTime: 0,
+  lastFrame: 0,
   lastSpawn: 0,
   lastShot: 0,
   healCount: 0,
   wrongShotCount: 0,
   hintShown: false,
-  keys: {},
-  mouse: { x: 640, y: 360, leftDown: false, rightDown: false },
-  startTime: 0,
-  lastFrame: 0,
   ended: false,
-  endingPhase: 0,     // 0=playing, 1=victory_msg, 2=reveal, 3=done
+  endingPhase: 0,
   endingTimer: 0,
+  raf: null,
+  bound: {},  // 事件回调引用
 
   start(cfg, onEnd) {
     this.cfg = cfg;
     this.onEnd = onEnd;
-    this.canvas = document.getElementById("minigameCanvas");
-    this.ctx = this.canvas.getContext("2d");
     this.reset();
+    this._initThree();
     this._bindInputs();
     this.running = true;
     this.ended = false;
@@ -51,11 +55,10 @@ const Minigame = {
   },
 
   reset() {
-    this.player = { x: 640, y: 400, hp: this.cfg.playerHP, r: 20, speed: this.cfg.playerSpeed, facing: 0 };
-    this.mei = { x: 640, y: 480, hp: this.cfg.meiHP, r: this.cfg.meiR };
     this.enemies = [];
     this.orbs = [];
     this.particles = [];
+    this.trails = [];
     this.timeLeft = this.cfg.duration;
     this.lastSpawn = 0;
     this.lastShot = 0;
@@ -63,67 +66,271 @@ const Minigame = {
     this.wrongShotCount = 0;
     this.hintShown = false;
     this.keys = {};
-    document.getElementById("mgResult").classList.remove("is-show");
-    document.getElementById("mgHint").style.display = "block";
-    document.getElementById("mgHint").textContent = "左键 紫球(打敌人) · 右键 黄球(奶) · 按 E 让球反方向飞回 · 奶到身后的小美一次即可通关";
+    this.ended = false;
+    this.endingPhase = 0;
+    const hintEl = document.getElementById("mgHint");
+    if (hintEl) {
+      hintEl.style.display = "block";
+      hintEl.textContent = "左键 紫球(打敌人) · 右键 黄球(奶) · 按 E 让球反方向飞回 · 奶到身后的小美即可通关";
+    }
+    const r = document.getElementById("mgResult");
+    if (r) r.classList.remove("is-show");
   },
 
-  stop() {
-    this.running = false;
-    if (this.RAF) cancelAnimationFrame(this.RAF);
-    this._unbindInputs();
+  _initThree() {
+    // 销毁旧实例
+    if (this.renderer) {
+      this._disposeScene();
+      this.renderer.dispose();
+      this.renderer.domElement = null;
+    }
+    const canvas = document.getElementById("minigameCanvas");
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setSize(1280, 720, false);
+
+    this.scene = new THREE.Scene();
+    this.scene.fog = new THREE.FogExp2(0x0a0f19, 0.012);
+
+    this.camera = new THREE.PerspectiveCamera(55, 1280 / 720, 0.1, 500);
+    this.camera.position.set(0, 18, 22);
+    this.camera.lookAt(0, 1, 0);
+
+    // 光照
+    this.scene.add(new THREE.AmbientLight(0x4a5a7a, 0.5));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(10, 20, 5);
+    this.scene.add(dir);
+    const p1 = new THREE.PointLight(0x9B30FF, 1.5, 60);
+    p1.position.set(-10, 8, -5);
+    this.scene.add(p1);
+    const p2 = new THREE.PointLight(0x4FC3F7, 1.2, 60);
+    p2.position.set(10, 8, 5);
+    this.scene.add(p2);
+
+    // 地面网格（守望先锋风格）
+    const grid = new THREE.GridHelper(200, 80, 0x4FC3F7, 0x1a2438);
+    grid.position.y = 0;
+    this.scene.add(grid);
+    // 地面发光板
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshStandardMaterial({ color: 0x0d1424, metalness: 0.7, roughness: 0.4, transparent: true, opacity: 0.85 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = -0.01;
+    this.scene.add(floor);
+
+    // 玩家（莫伊拉）= 紫色发光胶囊体
+    this.playerGroup = new THREE.Group();
+    const playerBody = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.8, 1.2, 8, 16),
+      new THREE.MeshStandardMaterial({ color: 0x6a1fb0, emissive: 0x9B30FF, emissiveIntensity: 0.6, metalness: 0.3, roughness: 0.4 })
+    );
+    playerBody.position.y = 1.4;
+    this.playerGroup.add(playerBody);
+    // 头
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xe8d7ff, emissive: 0x9B30FF, emissiveIntensity: 0.2 })
+    );
+    head.position.y = 2.6;
+    this.playerGroup.add(head);
+    // 朝向指示锥（黄）
+    const facingCone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.4, 1.5, 12),
+      new THREE.MeshStandardMaterial({ color: 0xF99E2A, emissive: 0xF99E2A, emissiveIntensity: 0.5 })
+    );
+    facingCone.rotation.z = -Math.PI / 2;
+    facingCone.position.set(1.5, 1.4, 0);
+    this.playerGroup.add(facingCone);
+    // 玩家光环
+    const halo = new THREE.Mesh(
+      new THREE.RingGeometry(1.2, 1.5, 32),
+      new THREE.MeshBasicMaterial({ color: 0x9B30FF, side: THREE.DoubleSide, transparent: true, opacity: 0.5 })
+    );
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = 0.05;
+    this.playerGroup.add(halo);
+    this.playerHalo = halo;
+
+    this.player = this.playerGroup;
+    this.player.position.set(0, 0, 0);
+    this.player.facing = 0;  // 弧度
+    this.scene.add(this.player);
+
+    // 小美 = 青蓝色球体（永远在玩家身后）
+    const meiGroup = new THREE.Group();
+    const meiBody = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.6, 1.0, 8, 16),
+      new THREE.MeshStandardMaterial({ color: 0x2a7fb5, emissive: 0x4FC3F7, emissiveIntensity: 0.6, metalness: 0.3, roughness: 0.4 })
+    );
+    meiBody.position.y = 1.2;
+    meiGroup.add(meiBody);
+    const meiHead = new THREE.Mesh(
+      new THREE.SphereGeometry(0.45, 16, 16),
+      new THREE.MeshStandardMaterial({ color: 0xd7ecff, emissive: 0x4FC3F7, emissiveIntensity: 0.2 })
+    );
+    meiHead.position.y = 2.2;
+    meiGroup.add(meiHead);
+    // 小美光环
+    const meiHalo = new THREE.Mesh(
+      new THREE.RingGeometry(0.9, 1.15, 32),
+      new THREE.MeshBasicMaterial({ color: 0x4FC3F7, side: THREE.DoubleSide, transparent: true, opacity: 0.5 })
+    );
+    meiHalo.rotation.x = -Math.PI / 2;
+    meiHalo.position.y = 0.05;
+    meiGroup.add(meiHalo);
+    this.meiHalo = meiHalo;
+    this.mei = meiGroup;
+    this.mei.hp = this.cfg.meiHP;
+    this.scene.add(this.mei);
+
+    // 加载球纹理
+    this._loadOrbTextures();
+  },
+
+  _loadOrbTextures() {
+    const texLoader = new THREE.TextureLoader();
+    try {
+      this.orbTextures.purple = texLoader.load("assets/images/minigame/orb_purple.jpg");
+      this.orbTextures.yellow = texLoader.load("assets/images/minigame/orb_yellow.jpg");
+    } catch (e) { /* fallback 用纯色 */ }
+  },
+
+  _makeOrbMesh(type) {
+    const color = type === "purple" ? 0x9B30FF : 0xFFD700;
+    const tex = type === "purple" ? this.orbTextures.purple : this.orbTextures.yellow;
+    const matOpts = { color: 0xffffff, emissive: color, emissiveIntensity: 0.9, metalness: 0.5, roughness: 0.2 };
+    if (tex) matOpts.map = tex;
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(0.5, 24, 24),
+      new THREE.MeshStandardMaterial(matOpts)
+    );
+    // 光晕（双层 sprite 似）
+    const glow = new THREE.Mesh(
+      new THREE.SphereGeometry(0.8, 16, 16),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25 })
+    );
+    mesh.add(glow);
+    // 点光源
+    const light = new THREE.PointLight(color, 1.0, 8);
+    mesh.add(light);
+    return mesh;
+  },
+
+  _makeEnemyMesh() {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.8, 0),
+      new THREE.MeshStandardMaterial({ color: 0x441010, emissive: 0xE44040, emissiveIntensity: 0.7, metalness: 0.4, roughness: 0.3 })
+    );
+    body.position.y = 1.2;
+    g.add(body);
+    const halo = new THREE.Mesh(
+      new THREE.RingGeometry(1.0, 1.2, 16),
+      new THREE.MeshBasicMaterial({ color: 0xE44040, side: THREE.DoubleSide, transparent: true, opacity: 0.4 })
+    );
+    halo.rotation.x = -Math.PI / 2;
+    halo.position.y = 0.05;
+    g.add(halo);
+    return g;
+  },
+
+  _spawnParticles(x, y, z, color, n) {
+    for (let i = 0; i < n; i++) {
+      const m = new THREE.Mesh(
+        new THREE.SphereGeometry(0.1 + Math.random() * 0.15, 6, 6),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
+      );
+      m.position.set(x, y, z);
+      const a = Math.random() * Math.PI * 2;
+      const elev = Math.random() * Math.PI;
+      const s = 0.05 + Math.random() * 0.15;
+      m.userData = {
+        vx: Math.cos(a) * Math.sin(elev) * s,
+        vy: Math.cos(elev) * s + 0.05,
+        vz: Math.sin(a) * Math.sin(elev) * s,
+        life: 30 + Math.random() * 20,
+        maxLife: 50,
+      };
+      this.scene.add(m);
+      this.particles.push(m);
+    }
   },
 
   _bindInputs() {
-    this._keyDown = (e) => {
+    this.bound.keyDown = (e) => {
       this.keys[e.code] = true;
       if (e.code === "Escape") this._skip();
-      // E 单次触发：按下时立即处理，松开才允许下一次
       if (e.code === "KeyE" && !this._eHeld) {
         this._eHeld = true;
         this._reverseOrbs();
       }
     };
-    this._keyUp = (e) => {
+    this.bound.keyUp = (e) => {
       this.keys[e.code] = false;
       if (e.code === "KeyE") this._eHeld = false;
     };
-    this._mouseMove = (e) => {
-      const rect = this.canvas.getBoundingClientRect();
-      const sx = this.canvas.width / rect.width;
-      const sy = this.canvas.height / rect.height;
-      this.mouse.x = (e.clientX - rect.left) * sx;
-      this.mouse.y = (e.clientY - rect.top) * sy;
+    this.bound.mouseMove = (e) => {
+      const c = document.getElementById("minigameCanvas");
+      const rect = c.getBoundingClientRect();
+      this.mouse.x = e.clientX - rect.left;
+      this.mouse.y = e.clientY - rect.top;
+      // 归一化到 -1..1
+      this.mouse.nx = (this.mouse.x / rect.width) * 2 - 1;
+      this.mouse.ny = -((this.mouse.y / rect.height) * 2 - 1);
     };
-    this._mouseDown = (e) => {
+    this.bound.mouseDown = (e) => {
       e.preventDefault();
       if (e.button === 0) this.mouse.leftDown = true;
       if (e.button === 2) this.mouse.rightDown = true;
     };
-    this._mouseUp = (e) => {
+    this.bound.mouseUp = (e) => {
       if (e.button === 0) this.mouse.leftDown = false;
       if (e.button === 2) this.mouse.rightDown = false;
     };
-    this._contextMenu = (e) => e.preventDefault();
-    this._skipBtn = () => this._skip();
-
-    document.addEventListener("keydown", this._keyDown);
-    document.addEventListener("keyup", this._keyUp);
-    this.canvas.addEventListener("mousemove", this._mouseMove);
-    this.canvas.addEventListener("mousedown", this._mouseDown);
-    window.addEventListener("mouseup", this._mouseUp);
-    this.canvas.addEventListener("contextmenu", this._contextMenu);
-    document.getElementById("mgSkip").addEventListener("click", this._skipBtn);
+    this.bound.ctx = (e) => e.preventDefault();
+    this.bound.skip = () => this._skip();
+    const c = document.getElementById("minigameCanvas");
+    document.addEventListener("keydown", this.bound.keyDown);
+    document.addEventListener("keyup", this.bound.keyUp);
+    c.addEventListener("mousemove", this.bound.mouseMove);
+    c.addEventListener("mousedown", this.bound.mouseDown);
+    window.addEventListener("mouseup", this.bound.mouseUp);
+    c.addEventListener("contextmenu", this.bound.ctx);
+    const skipBtn = document.getElementById("mgSkip");
+    if (skipBtn) skipBtn.addEventListener("click", this.bound.skip);
   },
 
   _unbindInputs() {
-    document.removeEventListener("keydown", this._keyDown);
-    document.removeEventListener("keyup", this._keyUp);
-    this.canvas.removeEventListener("mousemove", this._mouseMove);
-    this.canvas.removeEventListener("mousedown", this._mouseDown);
-    window.removeEventListener("mouseup", this._mouseUp);
-    this.canvas.removeEventListener("contextmenu", this._contextMenu);
-    document.getElementById("mgSkip").removeEventListener("click", this._skipBtn);
+    const c = document.getElementById("minigameCanvas");
+    document.removeEventListener("keydown", this.bound.keyDown);
+    document.removeEventListener("keyup", this.bound.keyUp);
+    c.removeEventListener("mousemove", this.bound.mouseMove);
+    c.removeEventListener("mousedown", this.bound.mouseDown);
+    window.removeEventListener("mouseup", this.bound.mouseUp);
+    c.removeEventListener("contextmenu", this.bound.ctx);
+    const skipBtn = document.getElementById("mgSkip");
+    if (skipBtn) skipBtn.removeEventListener("click", this.bound.skip);
+  },
+
+  stop() {
+    this.running = false;
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this._unbindInputs();
+  },
+
+  _disposeScene() {
+    if (!this.scene) return;
+    this.scene.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) {
+        if (Array.isArray(obj.material)) obj.material.forEach(m => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    this.scene = null;
   },
 
   _skip() {
@@ -138,19 +345,17 @@ const Minigame = {
     this.lastFrame = now;
     this._update(dt);
     this._draw();
-    this.RAF = requestAnimationFrame(() => this.loop());
+    this.raf = requestAnimationFrame(() => this.loop());
   },
 
   _update(dt) {
-    if (this.ended) {
-      this._updateEnding(dt);
-      return;
-    }
+    if (this.ended) { this._updateEnding(dt); return; }
+
     // 时间
     this.timeLeft = Math.max(0, this.cfg.duration - (performance.now() - this.startTime) / 1000);
     if (this.timeLeft <= 0) { this._startEnd("timeout"); return; }
 
-    // 玩家移动
+    // 玩家移动（WASD 相对世界，简化）
     let mx = 0, my = 0;
     if (this.keys["KeyW"] || this.keys["ArrowUp"]) my -= 1;
     if (this.keys["KeyS"] || this.keys["ArrowDown"]) my += 1;
@@ -158,22 +363,32 @@ const Minigame = {
     if (this.keys["KeyD"] || this.keys["ArrowRight"]) mx += 1;
     if (mx || my) {
       const len = Math.hypot(mx, my) || 1;
-      this.player.x += (mx / len) * this.player.speed;
-      this.player.y += (my / len) * this.player.speed;
+      const sp = (this.cfg.playerSpeed || 4) * 0.06;
+      this.player.position.x += (mx / len) * sp;
+      this.player.position.z += (my / len) * sp;
     }
-    this.player.x = Math.max(40, Math.min(1240, this.player.x));
-    this.player.y = Math.max(40, Math.min(680, this.player.y));
+    // 限制范围
+    this.player.position.x = Math.max(-40, Math.min(40, this.player.position.x));
+    this.player.position.z = Math.max(-40, Math.min(40, this.player.position.z));
 
-    // 朝向（鼠标方向）
-    const dx = this.mouse.x - this.player.x;
-    const dy = this.mouse.y - this.player.y;
-    this.player.facing = Math.atan2(dy, dx);
+    // 朝向：基于鼠标位置（屏幕中心=正前方）
+    // 鼠标在屏幕的位置决定朝向角度
+    const facing = Math.atan2(this.mouse.nx, -this.mouse.ny);
+    this.player.facing = facing;
+    this.player.rotation.y = facing;
 
-    // 小美位置：永远在玩家"身后"（朝向反方向）
-    this.mei.x = this.player.x - Math.cos(this.player.facing) * this.cfg.meiDistance;
-    this.mei.y = this.player.y - Math.sin(this.player.facing) * this.cfg.meiDistance;
+    // 小美：永远在玩家"身后"（朝向反方向）距离 meiDistance/10
+    const dist = (this.cfg.meiDistance || 80) / 10;  // 转换到 3D 单位
+    const bx = this.player.position.x - Math.sin(facing) * dist;
+    const bz = this.player.position.z - Math.cos(facing) * dist;
+    this.mei.position.x = bx;
+    this.mei.position.z = bz;
+    this.mei.rotation.y = facing + Math.PI;  // 看向玩家方向
+    // 光环旋转
+    if (this.playerHalo) this.playerHalo.rotation.z += 0.02;
+    if (this.meiHalo) this.meiHalo.rotation.z -= 0.015;
 
-    // 射击：左键紫球，右键黄球
+    // 射击
     const nowShot = performance.now();
     if (this.mouse.leftDown && nowShot - this.lastShot > this.cfg.fireRate) {
       this.lastShot = nowShot;
@@ -182,48 +397,65 @@ const Minigame = {
     if (this.mouse.rightDown && nowShot - this.lastShot > this.cfg.fireRate) {
       this.lastShot = nowShot;
       this._fireOrb("yellow");
-      // 黄球直直朝前飞 → 永远打不到身后的小美
       this.wrongShotCount++;
-      // 摸索提示：玩家丢了几次黄球都没奶到，给一次温柔提示
       if (this.wrongShotCount >= 2 && !this.hintShown) {
         this.hintShown = true;
-        this._floatText(this.mei.x, this.mei.y - 30, "（轻声）我一直在你身后……球，可以反方向回来的。", "#9AC");
+        this._floatText(this.mei.position.x, 3, this.mei.position.z, "（轻声）我一直在你身后……球，可以反方向回来的。", "#9AC");
       }
     }
 
     // 球更新
     for (let i = this.orbs.length - 1; i >= 0; i--) {
       const o = this.orbs[i];
-      o.x += o.vx; o.y += o.vy; o.life--;
-      if (o.life <= 0 || o.x < -20 || o.x > 1300 || o.y < -20 || o.y > 740) {
-        this.orbs.splice(i, 1); continue;
+      o.mesh.position.x += o.vx;
+      o.mesh.position.y += o.vy;
+      o.mesh.position.z += o.vz;
+      o.life--;
+      // 拖尾
+      if (o.life % 2 === 0) {
+        const trail = new THREE.Mesh(
+          new THREE.SphereGeometry(0.35, 8, 8),
+          new THREE.MeshBasicMaterial({
+            color: o.type === "purple" ? 0x9B30FF : 0xFFD700,
+            transparent: true, opacity: 0.4
+          })
+        );
+        trail.position.copy(o.mesh.position);
+        trail.userData = { life: 15, max: 15 };
+        this.scene.add(trail);
+        this.trails.push(trail);
+      }
+      if (o.life <= 0) {
+        this._removeOrb(i);
+        continue;
       }
       if (o.type === "purple") {
         // 紫球打敌人
         let hit = false;
         for (let j = this.enemies.length - 1; j >= 0; j--) {
           const e = this.enemies[j];
-          if (Math.hypot(o.x - e.x, o.y - e.y) < e.r + o.r) {
+          if (o.mesh.position.distanceTo(e.mesh.position.clone().setY(o.mesh.position.y)) < 1.2) {
             e.hp -= this.cfg.purpleDamage;
-            this._spawnParticles(o.x, o.y, "#9B30FF", 6);
+            this._spawnParticles(o.mesh.position.x, o.mesh.position.y, o.mesh.position.z, 0x9B30FF, 6);
             GameAudio.sfx("hit");
             if (e.hp <= 0) {
-              this._spawnParticles(e.x, e.y, "#E44040", 14);
+              this._spawnParticles(e.mesh.position.x, e.mesh.position.y, e.mesh.position.z, 0xE44040, 14);
+              this.scene.remove(e.mesh);
               this.enemies.splice(j, 1);
             }
             hit = true;
             break;
           }
         }
-        if (hit) { this.orbs.splice(i, 1); continue; }
+        if (hit) { this._removeOrb(i); continue; }
       } else {
-        // 黄球奶小美（球必须反向飞回才能命中身后的小美）
-        if (Math.hypot(o.x - this.mei.x, o.y - this.mei.y) < this.mei.r + o.r) {
+        // 黄球奶小美
+        if (o.mesh.position.distanceTo(this.mei.position.clone().setY(o.mesh.position.y)) < 1.5) {
           this.mei.hp = Math.min(this.cfg.meiHP, this.mei.hp + this.cfg.yellowHeal);
-          this._floatText(this.mei.x, this.mei.y - 30, "+♥ 这次看到了", "#4FC3F7");
+          this._floatText(this.mei.position.x, 3, this.mei.position.z, "+♥ 这次看到了", "#4FC3F7");
           GameAudio.sfx("capture");
           this.healCount++;
-          this.orbs.splice(i, 1);
+          this._removeOrb(i);
           if (this.healCount >= this.cfg.winHealCount) {
             this._startEnd("win");
             return;
@@ -233,33 +465,51 @@ const Minigame = {
       }
     }
 
+    // 拖尾衰减
+    for (let i = this.trails.length - 1; i >= 0; i--) {
+      const t = this.trails[i];
+      t.userData.life--;
+      t.material.opacity = (t.userData.life / t.userData.max) * 0.4;
+      t.scale.multiplyScalar(0.92);
+      if (t.userData.life <= 0) {
+        this.scene.remove(t);
+        t.geometry.dispose(); t.material.dispose();
+        this.trails.splice(i, 1);
+      }
+    }
+
     // 敌人生成
     if (performance.now() - this.lastSpawn > this.cfg.enemySpawnInterval && this.enemies.length < this.cfg.enemyMax) {
       this.lastSpawn = performance.now();
-      const side = Math.floor(Math.random() * 4);
-      let x, y;
-      if (side === 0) { x = Math.random() * 1280; y = -20; }
-      else if (side === 1) { x = 1300; y = Math.random() * 720; }
-      else if (side === 2) { x = Math.random() * 1280; y = 740; }
-      else { x = -20; y = Math.random() * 720; }
-      this.enemies.push({ x, y, hp: this.cfg.enemyHP, r: 16, speed: this.cfg.enemySpeed });
+      const angle = Math.random() * Math.PI * 2;
+      const r = 25 + Math.random() * 10;
+      const ex = this.player.position.x + Math.cos(angle) * r;
+      const ez = this.player.position.z + Math.sin(angle) * r;
+      const m = this._makeEnemyMesh();
+      m.position.set(ex, 0, ez);
+      this.scene.add(m);
+      this.enemies.push({ mesh: m, hp: this.cfg.enemyHP, speed: (this.cfg.enemySpeed || 1) * 0.04 });
     }
 
-    // 敌人移动（优先切身后的小美，呼应"她替你扛刀"）
+    // 敌人移动（朝向小美）
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
-      const tx = this.mei.x, ty = this.mei.y;
-      const dx2 = tx - e.x, dy2 = ty - e.y;
-      const len = Math.hypot(dx2, dy2) || 1;
-      e.x += (dx2 / len) * e.speed;
-      e.y += (dy2 / len) * e.speed;
-      // 碰撞小美（永不倒，最低 1 血）
-      if (Math.hypot(e.x - this.mei.x, e.y - this.mei.y) < e.r + this.mei.r) {
+      const dx = this.mei.position.x - e.mesh.position.x;
+      const dz = this.mei.position.z - e.mesh.position.z;
+      const len = Math.hypot(dx, dz) || 1;
+      e.mesh.position.x += (dx / len) * e.speed;
+      e.mesh.position.z += (dz / len) * e.speed;
+      // 旋转动画
+      e.mesh.children[0].rotation.y += 0.04;
+      e.mesh.children[0].rotation.x += 0.02;
+      // 碰撞小美
+      if (e.mesh.position.distanceTo(this.mei.position) < 1.4) {
         this.mei.hp = Math.max(1, this.mei.hp - this.cfg.enemyDamage);
-        this._spawnParticles(this.mei.x, this.mei.y, "#E44040", 6);
+        this._spawnParticles(this.mei.position.x, 1.5, this.mei.position.z, 0xE44040, 6);
+        this.scene.remove(e.mesh);
         this.enemies.splice(i, 1);
         if (this.mei.hp <= 10) {
-          this._floatText(this.mei.x, this.mei.y - 30, "（轻声）没事……我自己能撑住。", "#9AC");
+          this._floatText(this.mei.position.x, 3, this.mei.position.z, "（轻声）没事……我自己能撑住。", "#9AC");
         }
       }
     }
@@ -267,27 +517,45 @@ const Minigame = {
     // 粒子
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
-      p.x += p.vx; p.y += p.vy; p.life--;
-      if (p.life <= 0) this.particles.splice(i, 1);
+      p.position.x += p.userData.vx;
+      p.position.y += p.userData.vy;
+      p.position.z += p.userData.vz;
+      p.userData.vy -= 0.003;
+      p.userData.life--;
+      p.material.opacity = Math.max(0, p.userData.life / p.userData.maxLife);
+      if (p.userData.life <= 0) {
+        this.scene.remove(p);
+        p.geometry.dispose(); p.material.dispose();
+        this.particles.splice(i, 1);
+      }
     }
 
-    // HUD：小美血条
-    document.getElementById("mgHpFill").style.width = Math.max(0, this.mei.hp / this.cfg.meiHP * 100) + "%";
-    document.getElementById("mgTimer").textContent = Math.ceil(this.timeLeft);
+    // 相机跟随玩家
+    this.camera.position.x = this.player.position.x;
+    this.camera.position.z = this.player.position.z + 22;
+    this.camera.lookAt(this.player.position.x, 1, this.player.position.z - 5);
+
+    // HUD
+    const hpEl = document.getElementById("mgHpFill");
+    if (hpEl) hpEl.style.width = Math.max(0, this.mei.hp / this.cfg.meiHP * 100) + "%";
+    const tEl = document.getElementById("mgTimer");
+    if (tEl) tEl.textContent = Math.ceil(this.timeLeft);
   },
 
   _fireOrb(type) {
-    const speed = this.cfg.orbSpeed;
-    const dx = Math.cos(this.player.facing);
-    const dy = Math.sin(this.player.facing);
+    const mesh = this._makeOrbMesh(type);
+    const fx = Math.sin(this.player.facing);
+    const fz = Math.cos(this.player.facing);
+    const speed = (this.cfg.orbSpeed || 7) * 0.1;
+    mesh.position.set(
+      this.player.position.x + fx * 1.5,
+      1.5,
+      this.player.position.z + fz * 1.5
+    );
+    this.scene.add(mesh);
     this.orbs.push({
-      x: this.player.x + dx * 25,
-      y: this.player.y + dy * 25,
-      vx: dx * speed,
-      vy: dy * speed,
-      r: this.cfg.orbR,
-      life: this.cfg.orbLife,
-      type,
+      mesh, type, life: this.cfg.orbLife,
+      vx: fx * speed, vy: 0, vz: fz * speed,
       reversed: false,
     });
     GameAudio.sfx("gunshot");
@@ -299,11 +567,24 @@ const Minigame = {
       if (!o.reversed) {
         o.reversed = true;
         o.vx = -o.vx;
-        o.vy = -o.vy;
+        o.vz = -o.vz;
         any = true;
+        // 反向闪光
+        this._spawnParticles(o.mesh.position.x, o.mesh.position.y, o.mesh.position.z,
+          o.type === "purple" ? 0xFF66FF : 0xFFFF66, 8);
       }
     }
     if (any) GameAudio.sfx("select");
+  },
+
+  _removeOrb(i) {
+    const o = this.orbs[i];
+    this.scene.remove(o.mesh);
+    o.mesh.traverse(c => {
+      if (c.geometry) c.geometry.dispose();
+      if (c.material) c.material.dispose();
+    });
+    this.orbs.splice(i, 1);
   },
 
   _startEnd(reason) {
@@ -311,21 +592,28 @@ const Minigame = {
     this.ended = true;
     this.endingPhase = 1;
     this.endingTimer = 0;
-    document.getElementById("mgHint").style.display = "none";
-    const resultEl = document.getElementById("mgResult");
+    const hintEl = document.getElementById("mgHint");
+    if (hintEl) hintEl.style.display = "none";
+    const r = document.getElementById("mgResult");
     if (reason === "win") {
-      resultEl.textContent = "这次，我奶到你了";
+      if (r) {
+        r.textContent = "这次，我奶到你了";
+        r.style.color = "#4FC3F7";
+        r.style.fontSize = "56px";
+        r.classList.add("is-show");
+      }
       GameAudio.sfx("success");
     } else if (reason === "skip") {
-      resultEl.textContent = "";
-      // 跳过也走揭示，但快速
+      if (r) r.classList.remove("is-show");
     } else {
-      resultEl.textContent = "她一直在你身后";
+      if (r) {
+        r.textContent = "她一直在你身后";
+        r.style.color = "#4FC3F7";
+        r.style.fontSize = "56px";
+        r.classList.add("is-show");
+      }
       GameAudio.sfx("bell");
     }
-    resultEl.style.color = "#4FC3F7";
-    resultEl.style.fontSize = "56px";
-    if (resultEl.textContent) resultEl.classList.add("is-show");
   },
 
   _updateEnding(dt) {
@@ -333,173 +621,57 @@ const Minigame = {
     if (this.endingPhase === 1 && this.endingTimer > 1800) {
       this.endingPhase = 2;
       this.endingTimer = 0;
-      document.getElementById("mgResult").classList.remove("is-show");
+      const r = document.getElementById("mgResult");
+      if (r) r.classList.remove("is-show");
+      // 揭示真名
+      this._revealNames();
     } else if (this.endingPhase === 2 && this.endingTimer > 3800) {
       this.endingPhase = 3;
       this.stop();
+      this._disposeScene();
       if (this.onEnd) this.onEnd(this.healCount > 0 ? "win" : "timeout");
     }
   },
 
-  _spawnParticles(x, y, color, n) {
-    for (let i = 0; i < n; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const s = 1 + Math.random() * 4;
-      this.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s, r: 2 + Math.random() * 3, color, life: 30 + Math.random() * 20 });
-    }
+  _revealNames() {
+    // 镜头拉近小美，她从身后"走出来"
+    // 用 DOM 层叠加文字（避免 3D 内嵌字体复杂度）
+    const wrap = document.getElementById("mgFloats");
+    if (!wrap) return;
+    const el = document.createElement("div");
+    el.className = "mg-reveal";
+    el.innerHTML = `
+      <div class="mg-reveal-line">原来——</div>
+      <div class="mg-reveal-name" style="color:#9B30FF">「QzSama」 → 赵启志</div>
+      <div class="mg-reveal-name" style="color:#4FC3F7">「可乐就是好喝」 → 朱盈畅</div>
+      <div class="mg-reveal-sub">她终于，从身后走到了你面前。</div>
+    `;
+    wrap.appendChild(el);
   },
 
-  _floatText(x, y, text, color) {
+  _floatText(x, y, z, text, color) {
+    const v = new THREE.Vector3(x, y, z);
+    v.project(this.camera);
+    const sx = (v.x * 0.5 + 0.5) * 1280;
+    const sy = (-v.y * 0.5 + 0.5) * 720;
+    const wrap = document.getElementById("mgFloats");
+    if (!wrap) return;
     const el = document.createElement("div");
     el.className = "mg-float";
     el.textContent = text;
     el.style.color = color;
-    el.style.fontSize = "20px";
-    el.style.whiteSpace = "nowrap";
-    const rect = this.canvas.getBoundingClientRect();
-    const wrap = document.getElementById("mgFloats");
-    const sx = rect.width / this.canvas.width;
-    const sy = rect.height / this.canvas.height;
-    el.style.left = (x * sx) + "px";
-    el.style.top = (y * sy) + "px";
+    el.style.left = sx + "px";
+    el.style.top = sy + "px";
     wrap.appendChild(el);
     setTimeout(() => el.remove(), 2200);
   },
 
   _draw() {
-    const ctx = this.ctx;
-    const W = 1280, H = 720;
-    // 背景
-    ctx.fillStyle = "#0a0f19";
-    ctx.fillRect(0, 0, W, H);
-    // 网格
-    ctx.strokeStyle = "rgba(79,195,247,0.08)";
-    ctx.lineWidth = 1;
-    for (let x = 0; x < W; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-    for (let y = 0; y < H; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-
-    // 揭示身份阶段：黑屏 + 文字
-    if (this.endingPhase === 2) {
-      ctx.fillStyle = "rgba(0,0,0,0.95)";
-      ctx.fillRect(0, 0, W, H);
-      ctx.textAlign = "center";
-      const t = this.endingTimer / 3800;
-      const fadeIn = Math.min(1, t * 2.5);
-      ctx.globalAlpha = fadeIn;
-      ctx.fillStyle = "#F5F7FA";
-      ctx.font = "bold 28px 'PingFang SC',sans-serif";
-      ctx.fillText("原来——", W / 2, H / 2 - 90);
-      ctx.font = "bold 44px 'PingFang SC',sans-serif";
-      ctx.fillStyle = "#9B30FF";
-      ctx.fillText("「QzSama」  →  赵启志", W / 2, H / 2 - 20);
-      ctx.fillStyle = "#4FC3F7";
-      ctx.fillText("「可乐就是好喝」  →  朱盈畅", W / 2, H / 2 + 50);
-      ctx.globalAlpha = Math.min(1, Math.max(0, (t - 0.45) * 2));
-      ctx.fillStyle = "#cfe3f0";
-      ctx.font = "italic 22px 'PingFang SC',sans-serif";
-      ctx.fillText("她终于，从身后走到了你面前。", W / 2, H / 2 + 130);
-      ctx.globalAlpha = 1;
-      return;
-    }
-
-    // 玩家瞄准线 + 朝向指示
-    const p = this.player;
-    ctx.strokeStyle = "rgba(249,158,42,0.3)";
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 6]);
-    ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(this.mouse.x, this.mouse.y); ctx.stroke();
-    ctx.setLineDash([]);
-    const fx = Math.cos(p.facing), fy = Math.sin(p.facing);
-    ctx.strokeStyle = "#F99E2A";
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
-    ctx.lineTo(p.x + fx * 45, p.y + fy * 45);
-    ctx.stroke();
-
-    // 小美（身后那个小点）
-    const m = this.mei;
-    ctx.save();
-    ctx.fillStyle = "#4FC3F7";
-    ctx.strokeStyle = "#9AC";
-    ctx.lineWidth = 2;
-    ctx.shadowBlur = 12; ctx.shadowColor = "#4FC3F7";
-    ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    // 小美血条
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(0,0,0,0.5)";
-    ctx.fillRect(m.x - 18, m.y - m.r - 10, 36, 4);
-    ctx.fillStyle = "#4FC3F7";
-    ctx.fillRect(m.x - 18, m.y - m.r - 10, 36 * (m.hp / this.cfg.meiHP), 4);
-    // 名字
-    ctx.fillStyle = "#9AC";
-    ctx.font = "12px 'PingFang SC',sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("小美（她）", m.x, m.y + m.r + 16);
-    ctx.restore();
-
-    // 玩家本体
-    ctx.save();
-    ctx.fillStyle = "#9B30FF";
-    ctx.strokeStyle = "#F99E2A";
-    ctx.lineWidth = 3;
-    ctx.shadowBlur = 12; ctx.shadowColor = "#9B30FF";
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.fillStyle = "#0a0f19";
-    ctx.beginPath(); ctx.arc(p.x, p.y, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = "#F99E2A";
-    ctx.font = "12px 'PingFang SC',sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("莫伊拉（你）", p.x, p.y - p.r - 10);
-    ctx.restore();
-
-    // 敌人
-    for (const e of this.enemies) {
-      ctx.save();
-      ctx.fillStyle = "#E44040";
-      ctx.strokeStyle = "#FF6B6B";
-      ctx.lineWidth = 2;
-      ctx.shadowBlur = 8; ctx.shadowColor = "#E44040";
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const a = (i / 6) * Math.PI * 2 + performance.now() / 500;
-        const px = e.x + Math.cos(a) * e.r;
-        const py = e.y + Math.sin(a) * e.r;
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.fillStyle = "#FF0000";
-      ctx.beginPath(); ctx.arc(e.x, e.y, 4, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-    }
-
-    // 球（紫/黄）
-    for (const o of this.orbs) {
-      ctx.save();
-      const color = o.type === "purple" ? "#9B30FF" : "#FFD700";
-      ctx.fillStyle = color;
-      ctx.shadowBlur = 14; ctx.shadowColor = color;
-      ctx.beginPath(); ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2); ctx.fill();
-      // 球尾迹
-      ctx.strokeStyle = color;
-      ctx.globalAlpha = 0.4;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(o.x, o.y);
-      ctx.lineTo(o.x - o.vx * 1.5, o.y - o.vy * 1.5);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // 粒子
-    for (const p of this.particles) {
-      ctx.save();
-      ctx.globalAlpha = Math.min(1, p.life / 30);
-      ctx.fillStyle = p.color;
-      ctx.shadowBlur = 8; ctx.shadowColor = p.color;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
+    if (this.renderer && this.scene && this.camera) {
+      this.renderer.render(this.scene, this.camera);
     }
   },
 };
+
+// 兼容旧 engine.js 直接引用 Minigame（已挂到 window）
+window.Minigame = Minigame;
