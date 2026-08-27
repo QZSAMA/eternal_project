@@ -20,11 +20,21 @@ CONFIG + validateConfig
           ▼
 纯状态机（无 DOM） ──► Renderer DOM/Canvas
           │                    │
-          ├──► AudioAdapter     ├──► 2D MiniGame（默认）
-          └──► StoryRunner      └──► WebGL MiniGame（可选增强）
+          ├──► AudioAdapter     ├──► Three.js/WebGL（默认）
+          └──► StoryRunner      └──► Canvas 2D ──► skip（降级）
 ```
 
 目标不是一次性拆成复杂框架，而是先把“状态、资源、渲染、输入”边界变成可测试接口：StoryRunner 只推进指令；渲染器只接收状态；小游戏以 `start/stop/onEnd` 适配器接入；音频和资源加载可以被 fake。这样既可保留当前原生 JS，也能按需迁移 ES Modules。
+
+### 2.1 2026-08-27 执行状态
+
+| 流 | 状态 | 已完成 | 下一出口条件 |
+|---|---|---|---|
+| M0 可靠性 | 完成 | 本地 Three.js、2D/skip、默认静默 BGM、两条离线 smoke | 保持零外链/零 404 回归门禁 |
+| M1 契约/测试 | 进行中 | `validateConfig`、模式/WebGL 探测/坐标纯函数、11 个 Node 测试、语法门禁、错误层 | 资产存在性预检、Engine 纯状态测试、CI smoke |
+| M2 素材/内容 | 进行中 | README/计划/项目记忆已收敛；BGM 策略已确定 | 透明无水印角色、资源 manifest/授权清单 |
+| M3 现场 UX | 进行中 | 焦点样式、对话公告、低动效 | 菜单焦点管理、虚拟摇杆/触控瞄准、窄屏 HUD |
+| M4 稳定/性能 | 未开始 | — | dt 物理、资源释放与 30/60/120 FPS 一致性 |
 
 ## 3. 分阶段执行
 
@@ -132,12 +142,12 @@ CONFIG + validateConfig
 
 ## 6. 风险与决策点
 
-需要用户在 M0 前确认的唯一架构决策是：
+架构决策已在 2026-08-27 确认：
 
-1. **Canvas 2D 回归（推荐）**：彻底符合零依赖/离线承诺，兼容性最好，视觉上牺牲部分 3D 效果。
-2. **保留 Three.js + 本地 vendoring + 2D fallback**：保留当前 3D 资产和机制，代码复杂度与包体略增，但可渐进迁移。
+1. ~~Canvas 2D 回归~~：未采用。
+2. **保留 Three.js + 本地 vendoring + 2D/skip fallback（已采用）**：保留当前 3D 资产和机制，接受约 670 KB 运行时和双渲染维护成本，换取离线与 GPU 故障下的主线可达性。
 
-无论选择哪条路径，都不接受仅保留远程 CDN 而没有降级。该决策会写入 `docs/project-memory.md` 和一条 ADR，并触发一次完整 smoke/性能复审。
+远程 CDN 仍被禁止。决策记录见 `docs/decisions/2026-08-27-threejs-offline-fallback.md`；升级 Three.js 或改变降级顺序必须重新跑完整 smoke/性能复审。
 
 ## 7. 首个迭代的 TDD 骨架
 
@@ -153,4 +163,3 @@ CONFIG + validateConfig
 ```
 
 每个测试都必须先观察到符合预期的失败，再提交最小实现；测试通过后才允许抽象 Renderer、AudioAdapter 或新的小游戏接口。
-

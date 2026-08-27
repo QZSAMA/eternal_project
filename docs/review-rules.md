@@ -43,16 +43,14 @@ P0 是发布阻断项；P1 必须进入下一迭代；P2 可排入维护窗口�
 每次发布至少执行：
 
 ```text
-node --check js/storyData.js
-node --check js/audio.js
-node --check js/minigame.js
-node --check js/engine.js
+npm test
+npm run check
 无网络浏览器 smoke：开始页 → gaming 分支 → 跳过 → 求婚 → 接受 → 结尾
 无网络浏览器 smoke：开始页 → first_date 分支 → 蒙太奇 → 求婚 → 接受 → 结尾
+降级 smoke：强制无 WebGL → 2D 可进入；强制无 Canvas → skip 后返回主线
 控制台：无 ReferenceError、未处理 Promise 拒绝、资源 404
 ```
 
 ## 7. 审查记录格式
 
 每个问题必须包含：`[P0/P1/P2]`、文件与行号、可复现步骤、实际结果、影响、建议修复、验证方式。修复后保留原问题 ID 和回归测试链接。
-

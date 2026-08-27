@@ -2,9 +2,20 @@
 
 ## 摘要
 
-本次审查针对 `trae/agent-1maClB` 的提交 `781f1da801db29fb6d8718a26c4a98ceb0ac4ba2`。项目是一个面向求婚现场的离线视觉小说原型：`index.html` 组织 1920×1080 舞台，`js/engine.js` 解释声明式剧情，`js/audio.js` 管理 BGM/SFX，`js/minigame.js` 使用 Three.js/WebGL 实现小游戏，`js/storyData.js` 集中保存剧情和素材路径。
+本次审查以 `trae/agent-1maClB` 的提交 `781f1da801db29fb6d8718a26c4a98ceb0ac4ba2` 为原始基线，并在 2026-08-27 对当前修复工作树复审。项目是一个面向求婚现场的离线视觉小说：`index.html` 组织 1920×1080 舞台，`js/engine.js` 解释声明式剧情，`js/audio.js` 管理 BGM/SFX，`js/minigame.js` 提供 Three.js/WebGL 主渲染和 Canvas 2D/skip 降级，`js/storyData.js` 集中保存剧情和素材路径。
 
-结论是：主线在“网络可用、WebGL 可用、只使用鼠标/键盘”的 Chromium 环境中可以演示，但还没有达到 README 所承诺的“自包含、无需联网、触屏可玩、零控制台错误”的现场发布标准。最关键的阻断项是入口在 `index.html:135` 依赖外部 Three.js CDN；在断网时小游戏启动会在 `js/minigame.js:88` 抛出 `ReferenceError: THREE is not defined`。此外，四个 BGM 文件没有提交而被配置引用，角色素材是带背景和 AI 水印的 JPG，触屏小游戏没有虚拟摇杆，计划/README 仍描述 Canvas 2D，均说明实现与产品规格已经发生漂移。
+复审结论：P0-001/P0-002 已关闭。Three.js `r160` 已 vendored 到仓库，运行时没有 CDN；小游戏现在按 Three.js → Canvas 2D → skip 降级并始终回到主线。四个未交付 BGM 改为显式空值，不再产生音频请求或 404；配置校验、错误层、焦点样式、`aria-live` 与低动效支持已经加入。`npm test` 11/11、`npm run check` 均通过，两条主线、Three.js、2D 和 skip 模式已在本地 Chromium 验证；WebGL 使用临时 Canvas 探测，2D 指针坐标在舞台缩放后也能映射到内部 Canvas。当前仍未达到最终现场发布条件：触屏小游戏没有虚拟摇杆，角色素材仍是带背景/水印的 JPG，3D 物理仍与帧率耦合，legacy Three.js build 有一条弃用 warning。
+
+### 修复复审状态
+
+| 问题 | 当前状态 | 验证证据 |
+|---|---|---|
+| P0-001 外部 CDN | 已关闭 | `vendor/three-r160.min.js`，浏览器资源列表无外部 URL |
+| P0-002 无 WebGL 降级 | 已关闭 | 强制 `mode="2d"` 可渲染；强制 `mode="skip"` 回到 `gaming[5]` |
+| P1-003 BGM 404 | 已关闭（默认静默策略） | 四个 BGM 配置为空；两条 smoke 无音频请求/404 |
+| P1-006 配置边界 | 部分关闭 | 真实姓名和小游戏配置已注入；仍有未使用的历史参数待清理 |
+| P1-007 配置 fail-fast | 部分关闭 | 已有启动校验和错误层；资产存在性预检仍需扩展 |
+| UI 焦点/公告/低动效 | 部分关闭 | 已加入 `:focus-visible`、`aria-live`、`prefers-reduced-motion`；触屏等价玩法未完成 |
 
 本报告将问题分为 P0（阻断发布）、P1（下一迭代必须处理）和 P2（维护窗口处理），并把每项风险映射到可复现步骤、文件行号、修复建议和验证门禁。配套的 `docs/project-memory.md`、`docs/review-rules.md`、根目录 `AGENTS.md` 和路线图用于持续记忆与后续协作。
 
@@ -44,9 +55,11 @@
 ```text
 index.html
   ├─ CSS 舞台与层级（背景/立绘/对话/菜单/特效/小游戏/求婚/结尾）
-  ├─ Three.js CDN（运行时外部依赖）
+  ├─ vendor/three-r160.min.js（本地锁定）
   └─ classic scripts
        ├─ storyData.js  ── CONFIG（剧情、姓名、资源、小游戏参数）
+       ├─ configValidation.js ── 配置/引用校验
+       ├─ minigameMode.js ── Three.js/2D/skip 选择
        ├─ audio.js      ── GameAudio（Audio 元素 + Web Audio 合成）
        ├─ minigame.js   ── Minigame（Three.js 场景与输入）
        └─ engine.js     ── Engine（label/pc 状态机与 DOM 调度）
@@ -76,12 +89,12 @@ playing --脚本末尾--> ended
 | 角色 | 6 个 1680×2240 RGB JPG，带纯色背景和“AI生成”水印 | README/计划描述透明 PNG 立绘 | 视觉小说层级效果不达标 |
 | 小游戏图标 | 5 个 JPG 路径存在 | 计划要求 player/healer/enemy 图标 | 当前 3D 实体没有使用这 3 个图标 |
 | 照片 | 4 个 2240×1680 JPG，启动时异步探测 | README 允许用户替换同名照片 | 可用，但缺少预加载完成信号 |
-| BGM | 配置了 opening/game/date/proposal 四个 MP3 路径 | README 称“可选” | 目录不存在，运行产生 404；只能靠静音降级 |
-| 运行时 | Three.js `0.160.0` 外链 | README/计划声称零外部依赖、Canvas 2D | 规格已漂移，离线承诺失效 |
+| BGM | opening/game/date/proposal 默认为空 | README 明确“可选、默认静默” | 无缺失文件请求；合成 SFX 可用 |
+| 运行时 | 本地 Three.js `r160` + Canvas 2D/skip | README 与计划已同步为混合渲染链路 | 离线约束已恢复 |
 
 ### 2.4 文档与实现漂移
 
-`README.md:3` 宣称“自包含、离线运行、无需联网”，`README.md:150` 又宣称“纯原生 JS + Canvas，零外部依赖”；而 `index.html:135` 引入 Three.js CDN，`js/minigame.js:2-10` 明确要求全局 `THREE`。`.trae/documents/galgame-proposal-complete-implementation.md` 仍以 Canvas 2D、玩家血量、占点进度和虚拟治疗为实现依据，但当前代码已经改成 Three.js、围绕小美血量和反向球机制运行。这样会让后续维护者依据错误规格继续改动，风险高于单个 bug。
+原基线的 README/计划曾宣称“纯原生 JS + Canvas，零外部依赖”，而实现从 CDN 引入 Three.js。当前 `README.md`、根目录实现计划、路线图和项目记忆已统一为“本地 Three.js 主渲染 + Canvas 2D/skip 降级”；`.trae/documents/galgame-proposal-complete-implementation.md` 仍是历史生成文档，不再作为单一事实源。后续维护以 `docs/project-memory.md` 与 ADR 为准。
 
 ## 3. 功能审查
 
@@ -91,15 +104,15 @@ playing --脚本末尾--> ended
 |---|---|---|
 | 开始页与首句 | 通过（在线） | `#startBtn` 解锁音频并进入 `waiting_input` |
 | 分支菜单 | 通过（在线） | 2 个按钮显示；Engine 支持上下箭头与回车 |
-| `gaming` 小游戏入口 | 条件通过 | 网络可用且 WebGL 可用时进入 `in_minigame` |
+| `gaming` 小游戏入口 | 通过 | WebGL 可用时进入本地 Three.js；不可用时进入 2D 或 skip |
 | 小游戏跳过 | 条件通过 | 跳过后仍执行约 5.6 秒结束/揭示时间线，再回到剧情 |
 | `first_date → montage` | 通过（在线） | 四张照片按序轮播，结束后进入 proposal |
 | 求婚自动播放 | 通过（在线） | 戒指、文案、按钮按定时器出现，接受按钮获得焦点 |
 | 接受 → 结尾 | 通过（在线） | `Engine.state=ended`，`.layer-ending.is-show` 出现 |
 | 静音按钮 | 通过 | `GameAudio.muted` 与按钮文本/类名同步 |
 | 拒绝按钮彩蛋 | 通过 | hover/click/focus 会移动按钮并显示提示，不会离开主线 |
-| 无网络小游戏 | 不通过 | 拦截 CDN 后 `THREE` 未定义，`js/minigame.js:88` 抛异常 |
-| BGM | 降级 | 四个 MP3 请求均 404；SFX 合成仍可工作 |
+| 无网络小游戏 | 通过 | 运行时无外部 URL；Three.js、2D、skip 均能继续主线 |
+| BGM | 通过（默认静默） | 空配置不发起请求；SFX 合成仍可工作 |
 | 触屏小游戏 | 不通过 | README `125` 声称“虚拟摇杆”，代码只有剧情 `touchstart`，没有移动/瞄准控件 |
 
 ### 3.2 小游戏机制审查
@@ -118,9 +131,9 @@ playing --脚本末尾--> ended
 
 | ID | 等级 | 位置 | 影响 | 建议 |
 |---|---|---|---|---|
-| P0-001 | P0 | `index.html:135`、`minigame.js:88` | 离线/被拦截网络时小游戏崩溃，主线无法继续 | vendored Three.js 或回退 Canvas 2D，并在启动时做依赖探测 |
-| P0-002 | P0 | `minigame.js:88-90` | WebGL 不可用时没有降级；现场 GPU/驱动差异会卡死 | 提供 2D 兼容实现或“跳过小游戏”兜底，并记录诊断 |
-| P1-003 | P1 | `storyData.js:22-28`、`assets/` | 四个 BGM 404，控制台有红色错误，现场无音乐 | 提交可授权音频或移除空引用；预检 manifest，缺失只报告一次 |
+| P0-001 | P0（已关闭） | `index.html`、`vendor/three-r160.min.js` | 原基线离线时主线会崩溃 | 已 vendored；保留版本哈希与离线 smoke |
+| P0-002 | P0（已关闭） | `js/minigameMode.js`、`js/minigame.js` | 原基线 WebGL 不可用时会卡死 | 已实现 2D/skip；保持模式测试和浏览器 smoke |
+| P1-003 | P1（已关闭） | `storyData.js:22-30`、`js/audio.js` | 原基线四个 BGM 404 | 默认空值；交付真实 BGM 时做授权和资源验收 |
 | P1-004 | P1 | `assets/images/characters/*`、`storyData.js:51-61` | JPG 非透明且带 AI 水印，角色矩形背景破坏合成和可信度 | 交付透明 PNG/WebP，去水印并做版权/隐私验收 |
 | P1-005 | P1 | `README.md:125`、`minigame.js:262-315` | 触屏用户无法移动/瞄准，文档承诺与行为不符 | Pointer Events + 虚拟摇杆/触控瞄准，保留键盘等价路径 |
 | P1-006 | P1 | `minigame.js:636-649`、`engine.js:105-113` | 真名、小游戏配置和部分参数硬编码/未使用，定制需改引擎 | 所有个人信息和子游戏配置从 `CONFIG` 注入，增加契约测试 |
@@ -132,15 +145,15 @@ playing --脚本末尾--> ended
 
 ### 4.2 P0-001：外部 CDN 破坏离线主线
 
-**复现**：浏览器加载本地站点时拦截 `https://unpkg.com/**`，开始页仍能显示；调用 `Engine.callMinigame` 后 `typeof THREE` 为 `undefined`，`new THREE.WebGLRenderer` 在 `minigame.js:88` 抛出 `ReferenceError`。这是直接违反 `README.md:3` 和计划中的离线约束。
+**原基线复现（已修复）**：浏览器加载本地站点时拦截 `https://unpkg.com/**`，开始页仍能显示；调用 `Engine.callMinigame` 后 `typeof THREE` 为 `undefined`，`new THREE.WebGLRenderer` 抛出 `ReferenceError`。
 
 **影响**：求婚现场最不应依赖临时网络。即使入口和前半段剧情能播放，用户在分支进入小游戏时才会遇到不可恢复的异常；由于没有错误层，现场只会看到小游戏层或黑屏。远程 CDN 还带来版本供应链和缓存不确定性。
 
-**修复与验证**：优先把锁定版本的 Three.js 放进仓库并加完整性哈希，同时保留渲染器创建失败的 2D/跳过路径；更稳妥的方案是把小游戏重写为纯 Canvas 2D，运行时完全无第三方依赖。测试必须在断网/拦截 CDN 两种条件下从 `gaming` 走到 proposal。
+**修复与验证**：已采用“本地锁定 Three.js + 2D/skip”方案。`vendor/three-r160.min.js` SHA-256 为 `170c6789f43217c96b3170f4b42fafe135de7f7cd48497a4218f9757ee1d49fa`；模式选择有 Node 回归测试，浏览器实测 Three.js 和 2D 均可进入、skip 后主线继续。
 
 ### 4.3 P1-003：音频资源契约未闭合
 
-`storyData.js:24-27` 引用四个 MP3，但 `assets/audio/` 目录不存在。Playwright 网络记录得到 `opening.mp3`、`game.mp3`、`date.mp3`、`proposal.mp3` 的 404。`audio.js:94-96` 会吞掉播放失败，因此剧情不阻塞，但控制台红错、音乐体验缺失，且用户无法知道是“未提供音乐”还是“浏览器被阻止”。
+原基线的 `storyData.js` 引用四个未提交 MP3，曾产生四个 404。当前四个 BGM 值为空，`GameAudio.bgm` 对空值直接返回，因此默认静默演示没有音频请求；真实音乐仍是可选交付物。
 
 建议把“可选 BGM”建模为显式空值或本地占位音频，启动时生成资源报告而不是让每个场景重复请求 404；若交付真实 BGM，必须记录授权来源和格式/响度验收。验收标准应区分“音频未提供的静默演示”和“已配置音频的零 404 发布包”。
 
@@ -168,18 +181,18 @@ playing --脚本末尾--> ended
 
 建议定义世界单位/秒，统一使用 `const seconds = dt / 1000`；对碰撞使用固定时间步长（例如 60 Hz）并在渲染帧之间插值。通过注入时钟和随机数源，测试“同一输入序列在不同帧率下获得相同结果”，再用真实设备做性能预算。
 
-## 5. Web Interface Guidelines 审查
+## 5. Web Interface Guidelines 审查（含复审状态）
 
 ### 5.1 可访问性与语义
 
 | 位置 | 发现 | 严重度 | 建议 |
 |---|---|---|---|
-| `index.html:5` | `user-scalable=no` 禁止缩放 | P1 | 移除，使用舞台缩放而不是禁止用户放大 |
+| `index.html` viewport | 已移除 `user-scalable=no` | 已关闭 | 保持用户缩放能力 |
 | `index.html:15-16` | 背景 `<img>` 的 `alt` 为空；若被视为内容则缺少描述 | P2 | 明确装饰语义 `aria-hidden`，由剧情文本承担叙事 |
-| `index.html:27`、`:66` | Canvas 没有文本替代或状态公告 | P1 | 提供游戏目标、状态、结果的可读 DOM 与键盘路径 |
-| `index.html:31-34` | 对话文本动态更新但没有 `aria-live` | P1 | 为对话区提供 `role="log"`/`aria-live="polite"`，避免打字机逐字过度播报 |
-| `index.html:39-43` | 选项面板缺少 dialog/listbox 语义和当前选项公告 | P1 | 使用语义按钮、`aria-activedescendant` 或明确选中状态 |
-| `index.html:105` | `autofocus` 会在求婚阶段强制夺焦点 | P2 | 仅在确认用户已进入 proposal 且提供焦点回退时使用 |
+| 小游戏 Canvas/HUD | 已有目标 `aria-label` 和结果 `role="status"`，但没有完整触屏等价玩法 | P1（部分关闭） | 完成虚拟摇杆/触控瞄准与状态公告 |
+| 对话区域 | 已加入 `role="log"`、`aria-live="polite"`、`aria-atomic` | 已关闭 | 浏览器/屏幕阅读器实机复核播报节奏 |
+| 选项面板 | 已加入 dialog/heading 语义；打开时尚未主动聚焦首项 | P1（部分关闭） | 补菜单焦点进入/退出和当前项公告 |
+| 求婚接受按钮 | 已移除静态 `autofocus`，运行时按阶段聚焦 | 已关闭 | 保留焦点回退策略 |
 | `engine.js:180-185`、`:233` | 动态角色图片 `alt=""` 且无显式尺寸 | P1 | 角色名/表情生成可读 alt，声明尺寸并处理失败占位 |
 | `engine.js:304-307` | 菜单使用按钮是正确方向，但未设置焦点/选中公告 | P1 | 打开菜单时聚焦第一项，键盘选择用 `aria-selected` 或 live 状态 |
 
@@ -187,10 +200,9 @@ playing --脚本末尾--> ended
 
 | 位置 | 发现 | 严重度 | 建议 |
 |---|---|---|---|
-| `css/style.css` 全文 | 没有 `:focus-visible` 规则；不能依赖浏览器默认焦点 | P1 | 为开始、静音、跳过、选项、接受/拒绝按钮提供高对比焦点环 |
-| `css/style.css:171,219,400` | 使用 `transition: all` | P2 | 只列出 `opacity/transform/background-color/border-color` 等实际属性 |
-| `css/style.css:60,232` | Ken Burns 8 秒循环无暂停且无 reduced-motion | P1 | `prefers-reduced-motion: reduce` 下静止，必要时提供暂停 |
-| `css/style.css:84,360,368,391,472` | 呼吸、戒指、光晕、按钮脉冲等循环动画没有 reduced-motion 变体 | P1 | 统一关闭/降频，保证求婚现场可控 |
+| 全部按钮 | 已加入高对比 `:focus-visible` | 已关闭 | 实机检查投屏对比度 |
+| CSS 过渡 | 已移除 `transition: all` | 已关闭 | 新增规则继续列出具体属性 |
+| 循环动画 | 已加入统一 `prefers-reduced-motion: reduce` | 已关闭（代码） | 低动效系统设置下做视觉复核 |
 | `index.html:74-75`、`minigame.js:262-315` | 小游戏只实现鼠标/键盘，未提供触屏等价操作 | P1 | Pointer Events + 虚拟摇杆；`touch-action: manipulation` |
 | `engine.js:520-526` | 触屏推进仅监听 `touchstart`，可能与滚动/合成 click 产生重复语义 | P2 | 统一 Pointer Events 并加入去重和可见提示 |
 
@@ -207,9 +219,9 @@ playing --脚本末尾--> ended
 
 | 风险 | 影响 | 发生概率 | 当前可探测性 | 综合等级 |
 |---|---:|---:|---:|---|
-| CDN/Three.js 离线失败 | 5 | 5 | 3 | P0 |
-| WebGL 驱动不可用 | 5 | 3 | 2 | P0 |
-| BGM 缺失/404 | 3 | 5 | 4 | P1 |
+| 本地 Three.js 文件缺失/损坏 | 5 | 2 | 4 | P1（有 2D/skip） |
+| WebGL 驱动不可用 | 2 | 3 | 5 | P2（自动 2D/skip） |
+| BGM 缺失/404 | 1 | 1 | 5 | 已关闭（默认空值） |
 | 角色水印/矩形背景 | 4 | 5 | 4 | P1 |
 | 触屏小游戏不可玩 | 4 | 3 | 3 | P1 |
 | 配置/脚本拼写错误静默结束 | 4 | 4 | 1 | P1 |
@@ -245,7 +257,7 @@ playing --脚本末尾--> ended
 
 Eternal 已经具备一个清晰、可演示的叙事原型：声明式故事数据降低了文案修改成本，Engine 的状态机使两条分支能够安全汇合，求婚接受和拒绝彩蛋提供了完整情绪闭环。在线 Chromium 环境的关键路径实测通过，说明问题不是“无法工作”，而是“尚未达到承诺的交付条件”。
 
-当前最重要的判断是可靠性优先于视觉增量。把 Three.js 运行时自包含或实现 2D 降级、补齐资源预检和故障可见性后，项目才有资格进入现场测试；在此之前继续添加动画、章节或新素材会放大验证成本。第二优先级是收敛规格：以实际 Three.js 机制为准更新 README/计划，或反向把实现拉回 Canvas 2D，不能保留两套互相矛盾的产品事实。第三优先级是建立 TDD 与浏览器 smoke 门禁，使每次内容定制都能证明两条主线、跳过路径和接受结尾仍然可达。
+可靠性 P0 已完成：运行时自包含，WebGL 失败有 2D/skip，默认 BGM 不再制造 404，配置错误可见，TDD 和浏览器 smoke 已成为门禁。下一阶段应优先完成触屏等价玩法、按 `dt` 重构物理、替换合规透明角色素材和资产 manifest；之后再扩展新章节或视觉效果。当前工作树可进入真实设备彩排，但在这些 P1 完成且真实内容/音频授权验收前不应标记为现场发布版。
 
 ## 9. 参考资料
 
@@ -254,4 +266,3 @@ Eternal 已经具备一个清晰、可演示的叙事原型：声明式故事数
 [2] Vercel Labs. Web Interface Guidelines[EB/OL]. https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md, 2026-08-27.
 
 [3] QZSAMA. eternal_project, commit 781f1da801db29fb6d8718a26c4a98ceb0ac4ba2[EB/OL]. https://github.com/QZSAMA/eternal_project/commit/781f1da801db29fb6d8718a26c4a98ceb0ac4ba2, 2026-08-27.
-

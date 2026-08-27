@@ -1,12 +1,12 @@
 # 求婚 Galgame 网页游戏 — 使用与定制指南
 
-一个自包含、离线运行的网页视觉小说，讲述"守望双排相识 → 走到现实 → 求婚"的故事。双击 `index.html` 即可运行，无需联网、无需安装。
+一个自包含、离线优先的网页视觉小说，讲述“守望双排相识 → 走到现实 → 求婚”的故事。Three.js `r160` 已随仓库本地提供；WebGL 不可用时自动降级为 Canvas 2D，2D 也不可用时自动跳过小游戏并继续主线。无需联网或在线 API。
 
 ---
 
 ## 快速开始
 
-1. 双击 `index.html` 用 Chrome / Edge 打开（推荐全屏 F11）
+1. 推荐在项目目录运行 `python -m http.server 4173`，再用 Chrome / Edge 打开 `http://127.0.0.1:4173/`（现场前请按此方式验证；也可尝试直接双击 `index.html`）
 2. 点击"点击开始"按钮（解锁音频）
 3. 点击 / 空格 / 回车 推进剧情
 4. 剧情中段有一个守望主题小游戏（WASD 移动 + 鼠标射击），也可点"跳过"
@@ -23,9 +23,14 @@
 ├── css/style.css           # 全部样式
 ├── js/
 │   ├── storyData.js        # ★ 主要配置文件（文案/照片/BGM/剧情）
+│   ├── configValidation.js # 配置与资源引用校验
+│   ├── minigameMode.js     # Three.js / 2D / skip 模式选择
 │   ├── engine.js           # 引擎核心
-│   ├── minigame.js         # 守望小游戏
+│   ├── minigame.js         # Three.js + Canvas 2D 守望小游戏
 │   └── audio.js            # 音频系统
+├── vendor/
+│   └── three-r160.min.js   # 本地锁定的 Three.js 运行时
+├── tests/                  # Node 配置/模式回归测试
 ├── assets/images/
 │   ├── backgrounds/        # 6 张场景背景
 │   ├── characters/         # 6 张人物立绘
@@ -73,13 +78,13 @@ meta: {
 
 ### 3. 替换 BGM（可选）
 
-把 MP3 放入 `assets/audio/bgm/`：
+默认配置中的四个 BGM 值为空，因此不会请求不存在的文件；Web Audio 合成 SFX 仍可用。如需音乐，把 MP3 放入 `assets/audio/bgm/`，并在 `js/storyData.js` 的 `audio.bgm` 中填写对应路径：
 - `opening.mp3` — 开场/双排
 - `game.mp3` — 小游戏
 - `date.mp3` — 约会
 - `proposal.mp3` — 求婚
 
-不放 MP3 时静默运行，不影响体验。
+不放 MP3 时静默运行，不产生音频 404，也不阻塞剧情。
 
 ### 4. 调整小游戏难度
 
@@ -87,9 +92,9 @@ meta: {
 ```js
 minigame: {
   duration: 60,        // 时长（秒）
-  playerHP: 100,       // 玩家血量
-  captureRate: 5,      // 占点速度（%/秒）
-  enemySpawnInterval: 1200, // 敌人生成间隔（ms）
+  winHealCount: 1,     // 奶到小美几次后通关
+  meiHP: 100,          // 小美血量
+  enemySpawnInterval: 2200, // 敌人生成间隔（ms）
   // ...更多参数见文件注释
 }
 ```
@@ -122,7 +127,7 @@ minigame: {
 |---|---|---|
 | 鼠标 | 点击推进 | 移动瞄准 + 左键射击 |
 | 键盘 | 空格/回车/→ 推进；↑↓ 选选项 | WASD 移动；Esc 跳过 |
-| 触屏 | 点击推进 | 虚拟摇杆移动 |
+| 触屏 | 点击推进 | 点击发射；当前无虚拟摇杆，可点“跳过”继续主线 |
 
 ---
 
@@ -147,9 +152,11 @@ A: 这是故意的彩蛋——确保现场零尴尬。只有"我愿意"可选。
 
 ## 技术说明
 
-- 纯原生 JS + Canvas，零外部依赖，离线运行
+- 原生 JavaScript + 本地 vendored Three.js `r160`；无 CDN、远程字体或在线 API
+- 小游戏渲染链路：Three.js/WebGL → Canvas 2D → 自动跳过并继续剧情
 - 1920×1080 基准舞台，`transform:scale()` 等比缩放
 - Web Audio API 合成音效（无音频文件也能出声）
+- `npm test` 运行配置与降级模式回归测试，`npm run check` 运行语法门禁
 - 不使用任何暴雪官方版权素材，守望风格仅为视觉语言提炼
 
 祝求婚顺利 ♥

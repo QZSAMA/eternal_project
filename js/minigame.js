@@ -1,5 +1,5 @@
 /* ============================================
-   逆转的奶 · 3D 版（Three.js）
+   逆转的奶 · Three.js 主渲染 + Canvas 2D / skip 降级
    机制不变：
      - 玩家=莫伊拉，第一/第三人称俯视
      - 小美永远在莫伊拉身后（朝向反方向）
@@ -7,7 +7,7 @@
      - 黄球直直朝前飞，打不到身后的她
      - 按 E 让球反方向飞回 → 奶到小美 → 通关揭示真名
    视觉：3D 场景，发光球体材质，粒子拖尾
-   依赖：全局 THREE（由 index.html CDN 加载）
+   依赖：全局 THREE（由 index.html 从本地 vendor 加载）；WebGL 不可用时不要求 THREE
    ============================================ */
 
 const Minigame = {
@@ -39,12 +39,29 @@ const Minigame = {
   endingTimer: 0,
   raf: null,
   bound: {},  // 事件回调引用
+  mode: "three",
+  fallbackCtx: null,
+  fallbackState: null,
 
   start(cfg, onEnd) {
     this.cfg = cfg;
     this.onEnd = onEnd;
     this.reset();
-    this._initThree();
+    this.mode = this._chooseMode();
+    if (this.mode === "three") {
+      try {
+        this._initThree();
+      } catch (error) {
+        console.warn("Three.js/WebGL unavailable; using 2D fallback", error);
+        this.mode = "2d";
+      }
+    }
+    if (this.mode === "2d") this._init2D();
+    if (this.mode === "skip") {
+      this.running = false;
+      if (this.onEnd) setTimeout(() => this.onEnd("skipped"), 0);
+      return;
+    }
     this._bindInputs();
     this.running = true;
     this.ended = false;
@@ -52,6 +69,18 @@ const Minigame = {
     this.startTime = performance.now();
     this.lastFrame = this.startTime;
     this.loop();
+  },
+
+  _chooseMode() {
+    // Probe on a disposable canvas: claiming a WebGL context on the game canvas
+    // would prevent getContext("2d") from working when Three.js is unavailable.
+    const webglAvailable = window.MinigameMode
+      ? window.MinigameMode.canCreateWebGL(() => document.createElement("canvas"))
+      : false;
+    const threeAvailable = typeof THREE !== "undefined" && typeof THREE.WebGLRenderer === "function";
+    if (window.MinigameMode) return window.MinigameMode.chooseMinigameMode({ threeAvailable, webglAvailable });
+    if (threeAvailable && webglAvailable) return "three";
+    return "2d";
   },
 
   reset() {
@@ -68,6 +97,7 @@ const Minigame = {
     this.keys = {};
     this.ended = false;
     this.endingPhase = 0;
+    this.fallbackState = null;
     const hintEl = document.getElementById("mgHint");
     if (hintEl) {
       hintEl.style.display = "block";
@@ -75,6 +105,27 @@ const Minigame = {
     }
     const r = document.getElementById("mgResult");
     if (r) r.classList.remove("is-show");
+  },
+
+  _init2D() {
+    const canvas = document.getElementById("minigameCanvas");
+    if (!canvas) throw new Error("minigame canvas not found");
+    this.fallbackCtx = canvas.getContext("2d");
+    if (!this.fallbackCtx) {
+      this.mode = "skip";
+      return;
+    }
+    this.fallbackState = {
+      player: { x: 640, y: 360, facingX: 0, facingY: -1 },
+      mei: { x: 640, y: 440, hp: this.cfg.meiHP || 100 },
+      orbs: [],
+      enemies: [],
+      lastSpawn: 0,
+    };
+    const hintEl = document.getElementById("mgHint");
+    if (hintEl) hintEl.textContent = "2D 兼容模式：WASD 移动 · 点击发射 · 按 E 让球反向飞回小美 · 也可跳过";
+    const canvasEl = document.getElementById("minigameCanvas");
+    if (canvasEl) canvasEl.setAttribute("aria-label", "2D 兼容模式：使用 WASD 移动，点击发射球，按 E 反向球体");
   },
 
   _initThree() {
@@ -275,11 +326,22 @@ const Minigame = {
     this.bound.mouseMove = (e) => {
       const c = document.getElementById("minigameCanvas");
       const rect = c.getBoundingClientRect();
-      this.mouse.x = e.clientX - rect.left;
-      this.mouse.y = e.clientY - rect.top;
-      // 归一化到 -1..1
-      this.mouse.nx = (this.mouse.x / rect.width) * 2 - 1;
-      this.mouse.ny = -((this.mouse.y / rect.height) * 2 - 1);
+      const mapped = window.MinigameMode
+        ? window.MinigameMode.mapPointerToCanvas({
+          clientX: e.clientX,
+          clientY: e.clientY,
+          rect,
+          canvasWidth: c.width,
+          canvasHeight: c.height,
+        })
+        : {
+          x: (e.clientX - rect.left) * c.width / rect.width,
+          y: (e.clientY - rect.top) * c.height / rect.height,
+        };
+      this.mouse.x = mapped.x;
+      this.mouse.y = mapped.y;
+      this.mouse.nx = mapped.nx ?? (mapped.x / c.width) * 2 - 1;
+      this.mouse.ny = mapped.ny ?? 1 - (mapped.y / c.height) * 2;
     };
     this.bound.mouseDown = (e) => {
       e.preventDefault();
@@ -319,6 +381,8 @@ const Minigame = {
     this.running = false;
     if (this.raf) cancelAnimationFrame(this.raf);
     this._unbindInputs();
+    this.fallbackCtx = null;
+    this.fallbackState = null;
   },
 
   _disposeScene() {
@@ -349,6 +413,10 @@ const Minigame = {
   },
 
   _update(dt) {
+    if (this.mode === "2d") {
+      this._update2D(dt);
+      return;
+    }
     if (this.ended) { this._updateEnding(dt); return; }
 
     // 时间
@@ -542,6 +610,139 @@ const Minigame = {
     if (tEl) tEl.textContent = Math.ceil(this.timeLeft);
   },
 
+  _update2D(dt) {
+    if (this.ended) { this._updateEnding(dt); return; }
+    const state = this.fallbackState;
+    if (!state) return;
+    const seconds = Math.min(0.1, dt / 1000);
+    this.timeLeft = Math.max(0, this.cfg.duration - (performance.now() - this.startTime) / 1000);
+    if (this.timeLeft <= 0) { this._startEnd("timeout"); return; }
+
+    let mx = 0, my = 0;
+    if (this.keys["KeyW"] || this.keys["ArrowUp"]) my -= 1;
+    if (this.keys["KeyS"] || this.keys["ArrowDown"]) my += 1;
+    if (this.keys["KeyA"] || this.keys["ArrowLeft"]) mx -= 1;
+    if (this.keys["KeyD"] || this.keys["ArrowRight"]) mx += 1;
+    const speed = (this.cfg.playerSpeed || 4) * 60;
+    if (mx || my) {
+      const length = Math.hypot(mx, my) || 1;
+      state.player.x = Math.max(30, Math.min(1250, state.player.x + (mx / length) * speed * seconds));
+      state.player.y = Math.max(30, Math.min(690, state.player.y + (my / length) * speed * seconds));
+    }
+
+    const dx = this.mouse.x - state.player.x;
+    const dy = this.mouse.y - state.player.y;
+    const aimLength = Math.hypot(dx, dy) || 1;
+    state.player.facingX = dx / aimLength;
+    state.player.facingY = dy / aimLength;
+    state.mei.x = state.player.x - state.player.facingX * (this.cfg.meiDistance || 80);
+    state.mei.y = state.player.y - state.player.facingY * (this.cfg.meiDistance || 80);
+
+    const now = performance.now();
+    if (this.mouse.leftDown && now - this.lastShot > (this.cfg.fireRate || 400)) {
+      this.lastShot = now;
+      this._fireOrb2D("purple");
+    }
+    if (this.mouse.rightDown && now - this.lastShot > (this.cfg.fireRate || 400)) {
+      this.lastShot = now;
+      this._fireOrb2D("yellow");
+      this.wrongShotCount++;
+      if (this.wrongShotCount >= 2 && !this.hintShown) {
+        this.hintShown = true;
+        this._floatText2D("按 E，让黄球反向飞回她身边", "#9AC");
+      }
+    }
+
+    for (let i = state.orbs.length - 1; i >= 0; i--) {
+      const orb = state.orbs[i];
+      orb.x += orb.vx * seconds;
+      orb.y += orb.vy * seconds;
+      orb.life -= seconds * 60;
+      if (orb.life <= 0 || orb.x < -30 || orb.x > 1310 || orb.y < -30 || orb.y > 750) {
+        state.orbs.splice(i, 1);
+        continue;
+      }
+      if (orb.type === "purple") {
+        let hit = false;
+        for (let j = state.enemies.length - 1; j >= 0; j--) {
+          const enemy = state.enemies[j];
+          if (Math.hypot(orb.x - enemy.x, orb.y - enemy.y) < 24) {
+            enemy.hp -= this.cfg.purpleDamage || 30;
+            hit = true;
+            if (enemy.hp <= 0) state.enemies.splice(j, 1);
+            break;
+          }
+        }
+        if (hit) state.orbs.splice(i, 1);
+      } else if (Math.hypot(orb.x - state.mei.x, orb.y - state.mei.y) < 28) {
+        state.mei.hp = Math.min(this.cfg.meiHP || 100, state.mei.hp + (this.cfg.yellowHeal || 40));
+        this.healCount++;
+        this._floatText2D("+♥ 这次看到了", "#4FC3F7");
+        state.orbs.splice(i, 1);
+        if (this.healCount >= (this.cfg.winHealCount || 1)) {
+          this._startEnd("win");
+          return;
+        }
+      }
+    }
+
+    if (now - state.lastSpawn > (this.cfg.enemySpawnInterval || 2200) && state.enemies.length < (this.cfg.enemyMax || 5)) {
+      state.lastSpawn = now;
+      const angle = Math.random() * Math.PI * 2;
+      const radius = 260 + Math.random() * 100;
+      state.enemies.push({
+        x: Math.max(20, Math.min(1260, state.mei.x + Math.cos(angle) * radius)),
+        y: Math.max(20, Math.min(700, state.mei.y + Math.sin(angle) * radius)),
+        hp: this.cfg.enemyHP || 30,
+      });
+    }
+    for (let i = state.enemies.length - 1; i >= 0; i--) {
+      const enemy = state.enemies[i];
+      const ex = state.mei.x - enemy.x;
+      const ey = state.mei.y - enemy.y;
+      const length = Math.hypot(ex, ey) || 1;
+      const enemySpeed = (this.cfg.enemySpeed || 1) * 60;
+      enemy.x += (ex / length) * enemySpeed * seconds;
+      enemy.y += (ey / length) * enemySpeed * seconds;
+      if (Math.hypot(enemy.x - state.mei.x, enemy.y - state.mei.y) < 24) {
+        state.mei.hp = Math.max(1, state.mei.hp - (this.cfg.enemyDamage || 8));
+        state.enemies.splice(i, 1);
+      }
+    }
+    const hpEl = document.getElementById("mgHpFill");
+    if (hpEl) hpEl.style.width = Math.max(0, state.mei.hp / (this.cfg.meiHP || 100) * 100) + "%";
+    const tEl = document.getElementById("mgTimer");
+    if (tEl) tEl.textContent = Math.ceil(this.timeLeft);
+  },
+
+  _fireOrb2D(type) {
+    const state = this.fallbackState;
+    if (!state) return;
+    const speed = (this.cfg.orbSpeed || 7) * 60;
+    state.orbs.push({
+      x: state.player.x + state.player.facingX * 24,
+      y: state.player.y + state.player.facingY * 24,
+      vx: state.player.facingX * speed,
+      vy: state.player.facingY * speed,
+      life: this.cfg.orbLife || 120,
+      type,
+      reversed: false,
+    });
+  },
+
+  _floatText2D(message, color) {
+    const wrap = document.getElementById("mgFloats");
+    if (!wrap) return;
+    const el = document.createElement("div");
+    el.className = "mg-float";
+    el.textContent = message;
+    el.style.color = color;
+    el.style.left = "50%";
+    el.style.top = "45%";
+    wrap.appendChild(el);
+    setTimeout(() => el.remove(), 2200);
+  },
+
   _fireOrb(type) {
     const mesh = this._makeOrbMesh(type);
     const fx = Math.sin(this.player.facing);
@@ -563,6 +764,20 @@ const Minigame = {
 
   _reverseOrbs() {
     let any = false;
+    if (this.mode === "2d") {
+      const state = this.fallbackState;
+      if (!state) return;
+      for (const orb of state.orbs) {
+        if (!orb.reversed) {
+          orb.reversed = true;
+          orb.vx = -orb.vx;
+          orb.vy = -orb.vy;
+          any = true;
+        }
+      }
+      if (any) GameAudio.sfx("select");
+      return;
+    }
     for (const o of this.orbs) {
       if (!o.reversed) {
         o.reversed = true;
@@ -640,12 +855,21 @@ const Minigame = {
     if (!wrap) return;
     const el = document.createElement("div");
     el.className = "mg-reveal";
-    el.innerHTML = `
-      <div class="mg-reveal-line">原来——</div>
-      <div class="mg-reveal-name" style="color:#9B30FF">「QzSama」 → 赵启志</div>
-      <div class="mg-reveal-name" style="color:#4FC3F7">「可乐就是好喝」 → 朱盈畅</div>
-      <div class="mg-reveal-sub">她终于，从身后走到了你面前。</div>
-    `;
+    const line = document.createElement("div");
+    line.className = "mg-reveal-line";
+    line.textContent = "原来——";
+    const hero = document.createElement("div");
+    hero.className = "mg-reveal-name";
+    hero.style.color = "#9B30FF";
+    hero.textContent = `「QzSama」 → ${this.cfg.realHeroName || ""}`;
+    const heroine = document.createElement("div");
+    heroine.className = "mg-reveal-name";
+    heroine.style.color = "#4FC3F7";
+    heroine.textContent = `「可乐就是好喝」 → ${this.cfg.realHeroineName || ""}`;
+    const sub = document.createElement("div");
+    sub.className = "mg-reveal-sub";
+    sub.textContent = "她终于，从身后走到了你面前。";
+    el.append(line, hero, heroine, sub);
     wrap.appendChild(el);
   },
 
@@ -667,9 +891,51 @@ const Minigame = {
   },
 
   _draw() {
+    if (this.mode === "2d") {
+      this._draw2D();
+      return;
+    }
     if (this.renderer && this.scene && this.camera) {
       this.renderer.render(this.scene, this.camera);
     }
+  },
+
+  _draw2D() {
+    const ctx = this.fallbackCtx;
+    const state = this.fallbackState;
+    if (!ctx || !state) return;
+    ctx.clearRect(0, 0, 1280, 720);
+    ctx.fillStyle = "#070b14";
+    ctx.fillRect(0, 0, 1280, 720);
+    ctx.strokeStyle = "rgba(79,195,247,.16)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= 1280; x += 40) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 720); ctx.stroke(); }
+    for (let y = 0; y <= 720; y += 40) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(1280, y); ctx.stroke(); }
+
+    ctx.strokeStyle = "rgba(249,158,42,.5)";
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 72, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = "rgba(79,195,247,.35)";
+    ctx.beginPath(); ctx.arc(state.mei.x, state.mei.y, 28, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = "#9B30FF";
+    ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 18, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#4FC3F7";
+    ctx.beginPath(); ctx.arc(state.mei.x, state.mei.y, 15, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "#F99E2A";
+    ctx.beginPath(); ctx.moveTo(state.player.x, state.player.y); ctx.lineTo(state.player.x + state.player.facingX * 34, state.player.y + state.player.facingY * 34); ctx.stroke();
+
+    state.enemies.forEach((enemy) => {
+      ctx.fillStyle = "#E44040";
+      ctx.beginPath(); ctx.arc(enemy.x, enemy.y, 14, 0, Math.PI * 2); ctx.fill();
+    });
+    state.orbs.forEach((orb) => {
+      ctx.fillStyle = orb.type === "purple" ? "#C56CFF" : "#FFD700";
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = 12;
+      ctx.beginPath(); ctx.arc(orb.x, orb.y, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+    });
   },
 };
 

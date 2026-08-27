@@ -1,0 +1,10 @@
+{
+  "name": "eternal-proposal-galgame",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Offline-first proposal visual novel",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "check": "node --check js/storyData.js && node --check js/configValidation.js && node --check js/minigameMode.js && node --check js/audio.js && node --check js/minigame.js && node --check js/engine.js"
+  }
+}

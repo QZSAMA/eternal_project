@@ -2,10 +2,10 @@
 
 ## 一、概要
 
-用一个自包含、离线运行的网页 Galgame（视觉小说），把"在守望先锋双排中相识 → 游戏走到现实 → 求婚"的故事讲给她看。剧情推进到"组排打游戏"段落时，嵌入一个可玩的守望先锋主题 Mini 小游戏（Canvas 实现）。最终场景自动播放求婚动画，她亲手点下"我愿意"。
+用一个自包含、离线运行的网页 Galgame（视觉小说），把“在守望先锋双排中相识 → 游戏走到现实 → 求婚”的故事讲给她看。剧情推进到“组排打游戏”段落时，嵌入一个可玩的守望先锋主题 Mini 小游戏（本地 Three.js 主渲染，Canvas 2D/skip 降级）。最终场景自动播放求婚动画，她亲手点下“我愿意”。
 
 **核心约束**：
-- 离线优先、零外部依赖，双击 `index.html` 即可运行
+- 离线优先、零运行时网络依赖；第三方库必须本地 vendoring，并保留不依赖 WebGL 的降级链路
 - 投屏友好：1920×1080 基准，等比缩放适配电视/投影
 - 程序员可配置：所有文案、照片、BGM 集中在 `storyData.js`，占位符用 `{{...}}`
 - 用户稍后提供真实照片；先用 Seedream 生成统一画风的二次元占位素材
@@ -30,12 +30,12 @@
 | 层面 | 选择 | 理由 |
 |---|---|---|
 | 引擎 | 原生 JS 声明式剧情解释器（借鉴 Ren'Py 语义） | 轻量、离线、无构建，约400-600行覆盖需求 |
-| 小游戏 | 原生 Canvas 2D + requestAnimationFrame | 零依赖，体积小，离线可用 |
+| 小游戏 | 本地 Three.js `r160` + Canvas 2D + skip | 保留 3D 表现；断网、无 WebGL 或无 2D context 时仍能继续主线 |
 | 音频 | Web Audio API + `<audio>` 元素 | 支持合成音效与外部MP3，开始按钮解锁自动播放 |
 | 布局 | 固定1920×1080舞台 + `transform: scale()` 等比缩放 | 投屏不变形，字号有保障 |
 | 素材 | Seedream 生成二次元占位 + 用户真实照片回退 | 先可演示，后替换 |
 
-**不使用**：Monogatari/Pixi/Phaser 等框架（体积大、需构建）；CDN 资源（离线不可用）；暴雪官方素材（版权）。
+**不使用**：Monogatari/Pixi/Phaser 等额外框架；CDN、远程字体和在线 API；暴雪官方素材（版权）。Three.js 是唯一第三方运行时，锁定版本并放在 `vendor/`。
 
 ---
 
@@ -48,9 +48,14 @@ proposal-galgame/
 │   └── style.css               # 全部样式：对话框、立绘、转场、OW主题、缩放
 ├── js/
 │   ├── engine.js               # 剧情解释器、场景/立绘/对话框系统、输入控制
-│   ├── minigame.js             # 守望先锋主题 Canvas 小游戏
+│   ├── configValidation.js     # CONFIG/剧情引用启动校验
+│   ├── minigameMode.js         # Three.js/2D/skip 模式选择（纯函数）
+│   ├── minigame.js             # 守望主题 Three.js + Canvas 2D 小游戏
 │   ├── audio.js                # BGM/SFX 管理（Web Audio，自动播放解锁）
 │   └── storyData.js            # ★ 用户主要配置文件：剧情、选项、素材、文案
+├── vendor/
+│   └── three-r160.min.js       # 本地锁定 Three.js
+├── tests/                      # 配置契约与降级模式回归测试
 ├── assets/
 │   ├── images/
 │   │   ├── backgrounds/        # 场景背景（二次元占位）

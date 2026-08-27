@@ -22,6 +22,8 @@ html,body{
   font-family:var(--font-stack);color:var(--text-light);
   -webkit-user-select:none;user-select:none;
   -webkit-tap-highlight-color:transparent;
+  color-scheme:dark;
+  touch-action:manipulation;
 }
 
 /* 舞台：固定 1920×1080，居中缩放 */
@@ -168,7 +170,7 @@ html,body{
   color:var(--text-light);background:rgba(42,71,94,.6);
   border:1px solid var(--ow-mid);cursor:pointer;text-align:left;
   clip-path:polygon(16px 0,100% 0,calc(100% - 16px) 100%,0 100%);
-  transition:all 200ms ease-out;opacity:0;transform:translateX(-20px);
+  transition:opacity 200ms ease-out,transform 200ms ease-out,background-color 200ms ease-out,border-color 200ms ease-out,color 200ms ease-out,box-shadow 200ms ease-out;opacity:0;transform:translateX(-20px);
 }
 .choice-btn.is-in{opacity:1;transform:translateX(0);}
 .choice-btn:hover,.choice-btn.is-selected{
@@ -216,7 +218,7 @@ html,body{
   width:64px;height:64px;font-size:28px;
   background:rgba(10,15,25,.7);border:1px solid var(--ow-mid);
   color:var(--ow-orange);cursor:pointer;pointer-events:auto;
-  border-radius:8px;transition:all 200ms;
+  border-radius:8px;transition:background-color 200ms,border-color 200ms,color 200ms;
 }
 .hud-btn:hover{background:rgba(249,158,42,.2);border-color:var(--ow-orange);}
 .hud-btn.is-muted{color:#666;text-decoration:line-through;}
@@ -397,7 +399,7 @@ html,body{
 .btn-reject{
   padding:12px 32px;font-size:22px;color:#888;background:rgba(80,80,80,.4);
   border:1px solid #444;cursor:pointer;border-radius:4px;
-  transition:all 200ms ease-out;
+  transition:transform 200ms ease-out,background-color 200ms ease-out,border-color 200ms ease-out,color 200ms ease-out;
 }
 .reject-tip{
   position:absolute;left:50%;bottom:120px;transform:translateX(-50%);
@@ -474,3 +476,32 @@ html,body{
 }
 .start-btn:hover{transform:scale(1.05);}
 .start-tip{margin-top:40px;font-size:20px;color:rgba(255,255,255,.4);}
+
+/* Keyboard and assistive technology support */
+button:focus-visible{
+  outline:3px solid var(--ow-cyan);
+  outline-offset:5px;
+}
+
+/* Runtime diagnostics */
+.layer-error{
+  position:absolute;inset:0;z-index:100;display:none;align-items:center;justify-content:center;
+  background:rgba(5,8,14,.96);padding:80px;
+}
+.layer-error.is-show{display:flex;}
+.error-panel{
+  width:min(900px,100%);padding:48px;text-align:center;background:rgba(27,40,56,.95);
+  border:2px solid var(--warn-red);box-shadow:0 0 48px rgba(228,64,64,.35);
+}
+.error-panel h2{font-size:42px;color:#ff8c8c;margin-bottom:24px;}
+.error-panel p{font-size:24px;line-height:1.6;color:var(--text-light);overflow-wrap:anywhere;}
+.error-panel button{margin-top:32px;padding:16px 36px;font-size:24px;color:#0a0f19;background:var(--ow-orange);border:0;cursor:pointer;}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{
+    animation-duration:0.001ms !important;
+    animation-iteration-count:1 !important;
+    scroll-behavior:auto !important;
+    transition-duration:0.001ms !important;
+  }
+}

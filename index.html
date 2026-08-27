@@ -2,13 +2,14 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我们的故事</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23f6c85f'/%3E%3Cpath d='M32 46S14 36 14 24c0-6 4-10 10-10 4 0 7 2 8 6 1-4 4-6 8-6 6 0 10 4 10 10 0 12-18 22-18 22Z' fill='%23fff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="css/style.css?v=4">
 </head>
 <body>
   <!-- 1920×1080 固定舞台，等比缩放适配投屏 -->
-  <div class="stage" id="stage">
+  <main class="stage" id="stage">
 
     <!-- 背景层：双层交叉淡入 -->
     <div class="layer-bg" id="layerBg">
@@ -28,7 +29,7 @@
 
     <!-- 对话框层 -->
     <div class="layer-dialogue" id="layerDialogue">
-      <div class="dialogue-box" id="dialogueBox">
+      <div class="dialogue-box" id="dialogueBox" role="log" aria-live="polite" aria-atomic="true">
         <div class="name-tag" id="nameTag"></div>
         <div class="text" id="dialogueText"></div>
         <div class="arrow" id="dialogueArrow">▼</div>
@@ -37,8 +38,8 @@
 
     <!-- 选项菜单层 -->
     <div class="layer-menu" id="layerMenu">
-      <div class="choice-panel" id="choicePanel">
-        <div class="choice-prompt" id="choicePrompt"></div>
+      <div class="choice-panel" id="choicePanel" role="dialog" aria-modal="true" aria-labelledby="choicePrompt">
+        <div class="choice-prompt" id="choicePrompt" role="heading" aria-level="2"></div>
         <div class="choice-list" id="choiceList"></div>
       </div>
     </div>
@@ -63,15 +64,15 @@
     <!-- 小游戏层：逆转的奶 -->
     <div class="layer-minigame" id="layerMinigame">
       <div class="mg-wrap">
-        <canvas id="minigameCanvas" width="1280" height="720"></canvas>
+        <canvas id="minigameCanvas" width="1280" height="720" role="application" aria-label="逆转的奶小游戏：使用 WASD 移动，鼠标发射球，按 E 反向球体"></canvas>
         <div class="mg-hud">
           <div class="mg-hp-bar"><div class="mg-hp-fill" id="mgHpFill"></div></div>
           <div class="mg-hp-label">小美血量</div>
           <div class="mg-timer" id="mgTimer">90</div>
           <div class="mg-floats" id="mgFloats"></div>
-          <div class="mg-result" id="mgResult"></div>
+          <div class="mg-result" id="mgResult" role="status" aria-live="polite"></div>
         </div>
-        <button class="mg-skip" id="mgSkip">跳过 ▶</button>
+        <button class="mg-skip" id="mgSkip" type="button" aria-label="跳过小游戏">跳过 ▶</button>
         <div class="mg-hint" id="mgHint">左键 紫球 · 右键 黄球 · 按 E 让球反方向飞回</div>
       </div>
     </div>
@@ -102,8 +103,8 @@
       </div>
       <div class="proposal-text" id="proposalText">嫁给我，好吗？</div>
       <div class="proposal-btns" id="proposalBtns">
-        <button class="btn-accept" id="btnAccept" autofocus>我愿意 ♥</button>
-        <button class="btn-reject" id="btnReject">让我想想…</button>
+        <button class="btn-accept" id="btnAccept" type="button">我愿意 ♥</button>
+        <button class="btn-reject" id="btnReject" type="button">让我想想…</button>
       </div>
       <div class="reject-tip" id="rejectTip"></div>
     </div>
@@ -118,6 +119,15 @@
       </div>
     </div>
 
+    <!-- 配置/运行时错误层 -->
+    <div class="layer-error" id="layerError" role="alert" aria-live="assertive">
+      <div class="error-panel">
+        <h2>无法开始这一段故事</h2>
+        <p id="errorText"></p>
+        <button id="errorReload" type="button">返回开始页</button>
+      </div>
+    </div>
+
     <!-- 开始界面层 -->
     <div class="layer-start" id="layerStart">
       <div class="start-screen">
@@ -129,13 +139,15 @@
       </div>
     </div>
 
-  </div>
+  </main>
 
-  <!-- Three.js 3D 引擎（CDN 全局版） -->
-  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <!-- Three.js 3D 引擎（本地 vendored，断网可用） -->
+  <script src="vendor/three-r160.min.js"></script>
 
   <!-- 加载顺序：数据 → 音频 → 小游戏 → 引擎 -->
   <script src="js/storyData.js?v=4"></script>
+  <script src="js/configValidation.js?v=1"></script>
+  <script src="js/minigameMode.js?v=1"></script>
   <script src="js/audio.js?v=4"></script>
   <script src="js/minigame.js?v=4"></script>
   <script src="js/engine.js?v=4"></script>

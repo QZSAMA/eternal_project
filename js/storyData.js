@@ -21,10 +21,12 @@ const CONFIG = {
 
   audio: {
     bgm: {
-      opening: "assets/audio/bgm/opening.mp3",
-      game: "assets/audio/bgm/game.mp3",
-      date: "assets/audio/bgm/date.mp3",
-      proposal: "assets/audio/bgm/proposal.mp3",
+      // Optional licensed tracks. Leave empty for the self-contained silent default;
+      // GameAudio will keep synthesized SFX without issuing 404 requests.
+      opening: "",
+      game: "",
+      date: "",
+      proposal: "",
     },
     sfx: {
       click: "synth:click",

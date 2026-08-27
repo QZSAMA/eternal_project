@@ -36,7 +36,17 @@ const Engine = {
       proposalBtns: $("proposalBtns"), btnAccept: $("btnAccept"), btnReject: $("btnReject"), rejectTip: $("rejectTip"),
       layerEnding: $("layerEnding"), endingBig: $("endingBig"), endingSub: $("endingSub"), endingMeta: $("endingMeta"), endingRestart: $("endingRestart"),
       layerStart: $("layerStart"), startTitle: $("startTitle"), startSub: $("startSub"), startBtn: $("startBtn"),
+      layerError: $("layerError"), errorText: $("errorText"), errorReload: $("errorReload"),
     };
+
+    if (window.ConfigValidation) {
+      const validation = window.ConfigValidation.validateConfig(data);
+      this.validation = validation;
+      if (!validation.ok) {
+        this._fail(`配置校验失败：${validation.errors.join("；")}`);
+        return;
+      }
+    }
 
     // 填充标题
     this.dom.startTitle.textContent = data.meta.title.replace(/[{}]/g, "");
@@ -55,6 +65,8 @@ const Engine = {
       this.dom.layerStart.classList.add("is-hidden");
       this.start();
     });
+
+    if (this.dom.errorReload) this.dom.errorReload.addEventListener("click", () => location.reload());
 
     // 输入路由
     this._bindInputs();
@@ -105,11 +117,24 @@ const Engine = {
   callMinigame(cfg, onEnd) {
     this.state = "in_minigame";
     this.dom.layerMinigame.classList.add("is-show");
-    Minigame.start(this.data.minigame, (result) => {
+    const gameCfg = {
+      ...this.data.minigame,
+      ...(cfg && typeof cfg === "object" ? cfg : {}),
+      realHeroName: this.data.meta.realHeroName || this.data.meta.heroName,
+      realHeroineName: this.data.meta.realHeroineName || this.data.meta.heroineName,
+    };
+    try {
+      Minigame.start(gameCfg, (result) => {
+        this.dom.layerMinigame.classList.remove("is-show");
+        this.state = "playing";
+        if (onEnd) onEnd(result);
+      });
+    } catch (error) {
+      console.error("Mini-game unavailable; continuing with skip fallback", error);
       this.dom.layerMinigame.classList.remove("is-show");
       this.state = "playing";
-      if (onEnd) onEnd(result);
-    });
+      if (onEnd) onEnd("skipped");
+    }
   },
 
   // ============ 指令派发 ============
@@ -141,7 +166,7 @@ const Engine = {
       case "effect": this._effect(arg); this.pc++; this._next(); break;
       case "montage": this._montage(arg); break; // 阻塞
       case "proposal": this._proposal(); break;  // 阻塞（终态）
-      default: this.pc++; this._next(); break;
+      default: this._fail(`未知剧情指令：${key}（${this.label}[${this.pc}]）`); break;
     }
   },
 
@@ -149,9 +174,20 @@ const Engine = {
     this.state = "ended";
   },
 
+  _fail(message) {
+    this.state = "error";
+    console.error(message);
+    if (this.dom.layerError) this.dom.layerError.classList.add("is-show");
+    if (this.dom.errorText) this.dom.errorText.textContent = message;
+  },
+
   // ============ scene ============
   _scene(arg) {
     const url = this.data.images.backgrounds[arg.bg];
+    if (!url) {
+      this._fail(`找不到背景资源：${arg && arg.bg ? arg.bg : "(empty)"}`);
+      return;
+    }
     // 交叉淡入：用非激活层加载新图，切换激活
     const aActive = this.dom.bgA.classList.contains("is-active");
     const next = aActive ? this.dom.bgB : this.dom.bgA;
@@ -164,8 +200,11 @@ const Engine = {
       next.classList.add("is-active");
       cur.classList.remove("is-active");
     };
-    if (next.complete) swap();
-    else { next.onload = swap; next.onerror = swap; }
+    if (next.complete && next.naturalWidth > 0) swap();
+    else {
+      next.onload = swap;
+      next.onerror = () => this._fail(`背景资源加载失败：${url}`);
+    }
   },
 
   // ============ show ============
@@ -339,7 +378,13 @@ const Engine = {
 
   // ============ call (minigame) ============
   _call(arg) {
-    this.callMinigame(arg.minigame, () => {
+    const gameId = arg && arg.minigame;
+    const gameCfg = (this.data.minigames && this.data.minigames[gameId]) || this.data.minigame;
+    if (!gameCfg) {
+      this._fail(`找不到小游戏配置：${gameId || "(empty)"}`);
+      return;
+    }
+    this.callMinigame(gameCfg, () => {
       this.pc++;
       this._next();
     });
