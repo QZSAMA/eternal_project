@@ -207,42 +207,69 @@ const Engine = {
     }
   },
 
-  // ============ show ============
-  _show(arg) {
-    const char = arg.char, expr = arg.expr || "neutral", pos = arg.pos || "left";
-    const url = this.data.images.characters[char][expr];
-    const slot = pos === "left" ? this.dom.charLeft : pos === "right" ? this.dom.charRight : this.dom.charCenter;
-    // 表情切换：若已有立绘，先淡出再换
+  _charSlots() {
+    return [this.dom.charLeft, this.dom.charCenter, this.dom.charRight].filter(Boolean);
+  },
+
+  _invalidateCharSlot(slot) {
+    if (slot._charSwapTimer != null) {
+      clearTimeout(slot._charSwapTimer);
+      slot._charSwapTimer = null;
+    }
+    slot._charRenderVersion = (slot._charRenderVersion || 0) + 1;
+    return slot._charRenderVersion;
+  },
+
+  _clearCharSlot(slot) {
+    this._invalidateCharSlot(slot);
+    slot.classList.remove("is-show", "is-speaking", "is-dim");
+    slot.dataset.char = "";
+    slot.dataset.expr = "";
+    slot.innerHTML = "";
+  },
+
+  _renderCharacterSlot(slot, { char, expr, url }) {
+    const version = this._invalidateCharSlot(slot);
+    const render = () => {
+      if (slot._charRenderVersion !== version) return;
+      slot._charSwapTimer = null;
+      slot.innerHTML = `<img class="char-img" src="${url}" alt="" onerror="this.style.display='none'">`;
+      slot.dataset.char = char;
+      slot.dataset.expr = expr;
+      requestAnimationFrame(() => {
+        if (slot._charRenderVersion !== version) return;
+        slot.classList.add("is-show");
+        this._updateSpeaking();
+      });
+    };
+
     if (slot.classList.contains("is-show")) {
       slot.classList.remove("is-show");
-      setTimeout(() => {
-        slot.innerHTML = `<img class="char-img" src="${url}" alt="" onerror="this.style.display='none'">`;
-        requestAnimationFrame(() => slot.classList.add("is-show"));
-        this._updateSpeaking();
-      }, 200);
+      slot._charSwapTimer = setTimeout(render, 200);
     } else {
-      slot.innerHTML = `<img class="char-img" src="${url}" alt="" onerror="this.style.display='none'">`;
-      requestAnimationFrame(() => slot.classList.add("is-show"));
+      render();
     }
-    slot.dataset.char = char;
-    slot.dataset.expr = expr;
+  },
+
+  // ============ show ============
+  _show(arg) {
+    const char = arg.char;
+    const expr = arg.expr || "neutral";
+    const pos = arg.pos || "left";
+    const url = this.data.images.characters[char][expr];
+    const slot = pos === "left" ? this.dom.charLeft : pos === "right" ? this.dom.charRight : this.dom.charCenter;
+
+    this._charSlots().forEach(candidate => {
+      if (candidate !== slot && candidate.dataset.char === char) this._clearCharSlot(candidate);
+    });
+    this._renderCharacterSlot(slot, { char, expr, url });
     this._updateSpeaking();
   },
 
   _hide(arg) {
-    if (arg.char === "*") {
-      [this.dom.charLeft, this.dom.charCenter, this.dom.charRight].forEach(s => {
-        s.classList.remove("is-show");
-        s.dataset.char = "";
-      });
-    } else {
-      [this.dom.charLeft, this.dom.charCenter, this.dom.charRight].forEach(s => {
-        if (s.dataset.char === arg.char) {
-          s.classList.remove("is-show");
-          s.dataset.char = "";
-        }
-      });
-    }
+    this._charSlots().forEach(slot => {
+      if (arg.char === "*" || slot.dataset.char === arg.char) this._clearCharSlot(slot);
+    });
   },
 
   _updateSpeaking() {
@@ -264,17 +291,13 @@ const Engine = {
       });
       // 表情切换
       if (arg.expr) {
-        [this.dom.charLeft, this.dom.charCenter, this.dom.charRight].forEach(s => {
-          if (s.dataset.char === who && s.dataset.expr !== arg.expr) {
-            const url = this.data.images.characters[who][arg.expr];
-            s.classList.remove("is-show");
-            setTimeout(() => {
-              s.innerHTML = `<img class="char-img" src="${url}" alt="" onerror="this.style.display='none'">`;
-              s.dataset.expr = arg.expr;
-              requestAnimationFrame(() => s.classList.add("is-show"));
-            }, 200);
-          }
-        });
+        const matchingSlots = this._charSlots().filter(slot => slot.dataset.char === who);
+        const slot = matchingSlots.shift();
+        matchingSlots.forEach(duplicate => this._clearCharSlot(duplicate));
+        if (slot && slot.dataset.expr !== arg.expr) {
+          const url = this.data.images.characters[who][arg.expr];
+          this._renderCharacterSlot(slot, { char: who, expr: arg.expr, url });
+        }
       }
     }
 
