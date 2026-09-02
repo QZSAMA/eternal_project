@@ -43,6 +43,9 @@ const Minigame = {
   mode: "three",
   fallbackCtx: null,
   fallbackState: null,
+  playerVelocity: { x: 0, y: 0, z: 0 },
+  maxParticles: 240,
+  maxTrails: 120,
 
   start(cfg, onEnd) {
     this.cfg = cfg;
@@ -96,6 +99,9 @@ const Minigame = {
     this.wrongShotCount = 0;
     this.hintShown = false;
     this.keys = {};
+    this.playerVelocity.x = 0;
+    this.playerVelocity.y = 0;
+    this.playerVelocity.z = 0;
     this._resetTouchInput();
     this.ended = false;
     this.endingPhase = 0;
@@ -471,6 +477,11 @@ const Minigame = {
 
   _spawnParticles(x, y, z, color, n) {
     for (let i = 0; i < n; i++) {
+      this._trimEffectCollection(this.particles, this.maxParticles, (stale) => {
+        this.scene.remove(stale);
+        stale.geometry.dispose();
+        stale.material.dispose();
+      });
       const m = new THREE.Mesh(
         new THREE.SphereGeometry(0.1 + Math.random() * 0.15, 6, 6),
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 })
@@ -585,25 +596,63 @@ const Minigame = {
     this._startEnd("skip");
   },
 
+  _clampDtMs(dt) {
+    const value = Number(dt);
+    if (!Number.isFinite(value) || value <= 0) return 0;
+    return Math.min(50, value);
+  },
+
+  _dtSeconds(dt) {
+    return this._clampDtMs(dt) / 1000;
+  },
+
+  _frameScale(dt) {
+    return this._clampDtMs(dt) / (1000 / 60);
+  },
+
+  _integrateVector(position, velocity, dt) {
+    const seconds = this._dtSeconds(dt);
+    position.x += velocity.x * seconds;
+    position.y += velocity.y * seconds;
+    if (Object.prototype.hasOwnProperty.call(position, "z")) position.z += velocity.z * seconds;
+    return position;
+  },
+
+  _distanceSquaredXZ(a, b) {
+    const dx = a.x - b.x;
+    const dz = (a.z || 0) - (b.z || 0);
+    return dx * dx + dz * dz;
+  },
+
+  _trimEffectCollection(collection, limit, dispose) {
+    if (!Array.isArray(collection) || !Number.isFinite(limit) || limit < 1) return;
+    while (collection.length >= limit) {
+      const oldest = collection.shift();
+      if (typeof dispose === "function") dispose(oldest);
+    }
+  },
+
   loop() {
     if (!this.running) return;
     const now = performance.now();
-    const dt = Math.min(50, now - this.lastFrame);
+    const dt = this._clampDtMs(now - this.lastFrame);
     this.lastFrame = now;
-    this._update(dt);
+    this._update(dt, now);
     this._draw();
     this.raf = requestAnimationFrame(() => this.loop());
   },
 
-  _update(dt) {
+  _update(dt, now = performance.now()) {
     if (this.mode === "2d") {
-      this._update2D(dt);
+      this._update2D(dt, now);
       return;
     }
     if (this.ended) { this._updateEnding(dt); return; }
 
+    const frameScale = this._frameScale(dt);
+
     // 时间
-    this.timeLeft = Math.max(0, this.cfg.duration - (performance.now() - this.startTime) / 1000);
+    this.timeLeft = Math.max(0, this.cfg.duration - (now - this.startTime) / 1000);
     if (this.timeLeft <= 0) { this._startEnd("timeout"); return; }
 
     // 玩家移动（WASD 相对世界，简化）
@@ -612,9 +661,11 @@ const Minigame = {
     const my = move.my;
     if (mx || my) {
       const len = Math.hypot(mx, my) || 1;
-      const sp = (this.cfg.playerSpeed || 4) * 0.06;
-      this.player.position.x += (mx / len) * sp;
-      this.player.position.z += (my / len) * sp;
+      const speed = (this.cfg.playerSpeed || 4) * 3.6;
+      this.playerVelocity.x = (mx / len) * speed;
+      this.playerVelocity.y = 0;
+      this.playerVelocity.z = (my / len) * speed;
+      this._integrateVector(this.player.position, this.playerVelocity, dt);
     }
     // 限制范围
     this.player.position.x = Math.max(-40, Math.min(40, this.player.position.x));
@@ -635,11 +686,11 @@ const Minigame = {
     this.mei.position.z = bz;
     this.mei.rotation.y = facing + Math.PI;  // 看向玩家方向
     // 光环旋转
-    if (this.playerHalo) this.playerHalo.rotation.z += 0.02;
-    if (this.meiHalo) this.meiHalo.rotation.z -= 0.015;
+    if (this.playerHalo) this.playerHalo.rotation.z += 0.02 * frameScale;
+    if (this.meiHalo) this.meiHalo.rotation.z -= 0.015 * frameScale;
 
     // 射击
-    const nowShot = performance.now();
+    const nowShot = now;
     if ((this.mouse.leftDown || this.touchInput.leftDown) && nowShot - this.lastShot > this.cfg.fireRate) {
       this.lastShot = nowShot;
       this._fireOrb("purple");
@@ -657,12 +708,19 @@ const Minigame = {
     // 球更新
     for (let i = this.orbs.length - 1; i >= 0; i--) {
       const o = this.orbs[i];
-      o.mesh.position.x += o.vx;
-      o.mesh.position.y += o.vy;
-      o.mesh.position.z += o.vz;
-      o.life--;
+      o.mesh.position.x += o.vx * frameScale;
+      o.mesh.position.y += o.vy * frameScale;
+      o.mesh.position.z += o.vz * frameScale;
+      o.life -= frameScale;
       // 拖尾
-      if (o.life % 2 === 0) {
+      o.trailAccumulator = (o.trailAccumulator || 0) + frameScale;
+      if (o.trailAccumulator >= 2) {
+        o.trailAccumulator %= 2;
+        this._trimEffectCollection(this.trails, this.maxTrails, (stale) => {
+          this.scene.remove(stale);
+          stale.geometry.dispose();
+          stale.material.dispose();
+        });
         const trail = new THREE.Mesh(
           new THREE.SphereGeometry(0.35, 8, 8),
           new THREE.MeshBasicMaterial({
@@ -684,7 +742,7 @@ const Minigame = {
         let hit = false;
         for (let j = this.enemies.length - 1; j >= 0; j--) {
           const e = this.enemies[j];
-          if (o.mesh.position.distanceTo(e.mesh.position.clone().setY(o.mesh.position.y)) < 1.2) {
+          if (this._distanceSquaredXZ(o.mesh.position, e.mesh.position) < 1.2 * 1.2) {
             e.hp -= this.cfg.purpleDamage;
             this._spawnParticles(o.mesh.position.x, o.mesh.position.y, o.mesh.position.z, 0x9B30FF, 6);
             GameAudio.sfx("hit");
@@ -700,7 +758,7 @@ const Minigame = {
         if (hit) { this._removeOrb(i); continue; }
       } else {
         // 黄球奶小美
-        if (o.mesh.position.distanceTo(this.mei.position.clone().setY(o.mesh.position.y)) < 1.5) {
+        if (this._distanceSquaredXZ(o.mesh.position, this.mei.position) < 1.5 * 1.5) {
           this.mei.hp = Math.min(this.cfg.meiHP, this.mei.hp + this.cfg.yellowHeal);
           this._floatText(this.mei.position.x, 3, this.mei.position.z, "+♥ 这次看到了", "#4FC3F7");
           GameAudio.sfx("capture");
@@ -718,9 +776,9 @@ const Minigame = {
     // 拖尾衰减
     for (let i = this.trails.length - 1; i >= 0; i--) {
       const t = this.trails[i];
-      t.userData.life--;
+      t.userData.life -= frameScale;
       t.material.opacity = (t.userData.life / t.userData.max) * 0.4;
-      t.scale.multiplyScalar(0.92);
+      t.scale.multiplyScalar(Math.pow(0.92, frameScale));
       if (t.userData.life <= 0) {
         this.scene.remove(t);
         t.geometry.dispose(); t.material.dispose();
@@ -729,8 +787,8 @@ const Minigame = {
     }
 
     // 敌人生成
-    if (performance.now() - this.lastSpawn > this.cfg.enemySpawnInterval && this.enemies.length < this.cfg.enemyMax) {
-      this.lastSpawn = performance.now();
+    if (now - this.lastSpawn > this.cfg.enemySpawnInterval && this.enemies.length < this.cfg.enemyMax) {
+      this.lastSpawn = now;
       const angle = Math.random() * Math.PI * 2;
       const r = 25 + Math.random() * 10;
       const ex = this.player.position.x + Math.cos(angle) * r;
@@ -747,11 +805,11 @@ const Minigame = {
       const dx = this.mei.position.x - e.mesh.position.x;
       const dz = this.mei.position.z - e.mesh.position.z;
       const len = Math.hypot(dx, dz) || 1;
-      e.mesh.position.x += (dx / len) * e.speed;
-      e.mesh.position.z += (dz / len) * e.speed;
+      e.mesh.position.x += (dx / len) * e.speed * frameScale;
+      e.mesh.position.z += (dz / len) * e.speed * frameScale;
       // 旋转动画
-      e.mesh.children[0].rotation.y += 0.04;
-      e.mesh.children[0].rotation.x += 0.02;
+      e.mesh.children[0].rotation.y += 0.04 * frameScale;
+      e.mesh.children[0].rotation.x += 0.02 * frameScale;
       // 碰撞小美
       if (e.mesh.position.distanceTo(this.mei.position) < 1.4) {
         this.mei.hp = Math.max(1, this.mei.hp - this.cfg.enemyDamage);
@@ -767,11 +825,11 @@ const Minigame = {
     // 粒子
     for (let i = this.particles.length - 1; i >= 0; i--) {
       const p = this.particles[i];
-      p.position.x += p.userData.vx;
-      p.position.y += p.userData.vy;
-      p.position.z += p.userData.vz;
-      p.userData.vy -= 0.003;
-      p.userData.life--;
+      p.position.x += p.userData.vx * frameScale;
+      p.position.y += p.userData.vy * frameScale;
+      p.position.z += p.userData.vz * frameScale;
+      p.userData.vy -= 0.003 * frameScale;
+      p.userData.life -= frameScale;
       p.material.opacity = Math.max(0, p.userData.life / p.userData.maxLife);
       if (p.userData.life <= 0) {
         this.scene.remove(p);
@@ -792,12 +850,12 @@ const Minigame = {
     if (tEl) tEl.textContent = Math.ceil(this.timeLeft);
   },
 
-  _update2D(dt) {
+  _update2D(dt, now = performance.now()) {
     if (this.ended) { this._updateEnding(dt); return; }
     const state = this.fallbackState;
     if (!state) return;
-    const seconds = Math.min(0.1, dt / 1000);
-    this.timeLeft = Math.max(0, this.cfg.duration - (performance.now() - this.startTime) / 1000);
+    const seconds = this._dtSeconds(dt);
+    this.timeLeft = Math.max(0, this.cfg.duration - (now - this.startTime) / 1000);
     if (this.timeLeft <= 0) { this._startEnd("timeout"); return; }
 
     const move = this._readMoveVector();
@@ -824,7 +882,6 @@ const Minigame = {
     state.mei.x = state.player.x - state.player.facingX * (this.cfg.meiDistance || 80);
     state.mei.y = state.player.y - state.player.facingY * (this.cfg.meiDistance || 80);
 
-    const now = performance.now();
     if ((this.mouse.leftDown || this.touchInput.leftDown) && now - this.lastShot > (this.cfg.fireRate || 400)) {
       this.lastShot = now;
       this._fireOrb2D("purple");
@@ -943,7 +1000,7 @@ const Minigame = {
     this.orbs.push({
       mesh, type, life: this.cfg.orbLife,
       vx: fx * speed, vy: 0, vz: fz * speed,
-      reversed: false,
+      reversed: false, trailAccumulator: 0,
     });
     GameAudio.sfx("gunshot");
   },
