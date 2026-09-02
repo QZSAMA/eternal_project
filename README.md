@@ -30,7 +30,7 @@
 │   └── audio.js            # 音频系统
 ├── vendor/
 │   └── three-r160.min.js   # 本地锁定的 Three.js 运行时
-├── tests/                  # Node 配置/模式回归测试
+├── tests/                  # Node 配置/模式回归 + Playwright smoke
 ├── assets/images/
 │   ├── backgrounds/        # 6 张场景背景
 │   ├── characters/         # 6 张人物立绘
