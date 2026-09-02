@@ -11,7 +11,7 @@
 | 基线提交 | `781f1da801db29fb6d8718a26c4a98ceb0ac4ba2` |
 | 运行方式 | 静态文件；发布前用 `python -m http.server 4173` 预览并做断网 smoke；`file://` 仅作便利入口 |
 | 运行时依赖 | 原生 JS/Web Audio/Canvas + 本地 `vendor/three-r160.min.js`；无运行时网络依赖 |
-| 测试现状 | Node 内置测试 17/17 通过，`npm run check` 通过；两条浏览器主线已 smoke |
+| 测试现状 | Node 内置测试 28/28 通过，`npm run check` 通过；两条浏览器主线已 smoke |
 | 资产现状 | 21 个图片文件，约 8.14 MB；BGM 默认显式空值，静默运行且不发起音频请求 |
 | 主要风险 | 触屏小游戏无虚拟摇杆；3D 帧率耦合；角色 JPG 带背景/水印；Three.js classic build 有弃用警告 |
 
@@ -24,7 +24,7 @@
 | 模块 | 文件 | 责任 | 对外依赖 |
 |---|---|---|---|
 | 入口/布局 | `index.html` | DOM 层级、脚本加载、固定舞台、本地脚本顺序 | 本地 Three.js、浏览器 API |
-| 剧情引擎 | `js/engine.js` | label/pc 状态机、指令解释、输入路由、场景和求婚 UI、角色槽位 latest-write-wins | `CONFIG`、`GameAudio`、`Minigame` |
+| 剧情引擎 | `js/engine.js` | label/pc 状态机、指令解释、输入路由、场景和求婚 UI、角色槽位 latest-write-wins、静音同步、可暂停蒙太奇生命周期 | `CONFIG`、`GameAudio`、`Minigame` |
 | 剧情数据 | `js/storyData.js` | 元数据、资源路径、指令数组、小游戏参数 | 无 |
 | 音频 | `js/audio.js` | BGM 淡入淡出、SFX、Web Audio 合成兜底 | Audio/AudioContext |
 | 配置校验 | `js/configValidation.js` | meta、资源引用、label/指令契约校验 | `CONFIG` 数据 |
@@ -40,7 +40,7 @@ idle --start--> playing
 playing --say--> waiting_input --advance--> playing
 playing --menu--> waiting_choice --choose--> playing
 playing --call--> in_minigame --onEnd--> playing
-playing --montage--> in_montage --onDone--> playing
+playing --montage--> in_montage --pause/resume--> in_montage --onDone--> playing
 playing --proposal--> in_proposal --accept--> ended
 playing --script end--> ended
 ```
@@ -60,6 +60,7 @@ playing --script end--> ended
 - Three.js classic minified build会输出一条官方弃用 warning，但没有 `ReferenceError` 或未处理 Promise rejection；后续迁移 ES module。
 - 桌面 1280×720 截图中 HUD 没有遮挡，但底部说明信息密度高；窄屏/触屏仍需专项验收。
 - 2026-08-28 Playwright Chromium 真实快速点击回归：`first_date` 与 `gaming + skip` 两条分支均通过，313 次推进/等待采样未出现重复可见角色；第一次见面分支进入公园后 `center` 已清空且 `right` 只有 `heroine`，游戏分支跳过后恢复到 `gaming[5]`，最新表情为 `hero:serious` 与 `heroine:laugh`，并完成蒙太奇到达求婚层。C 封面通过 1920×1080、1280×720 和 `prefers-reduced-motion: reduce` 复核，人物脸部完整，无水印、黑边、破图或横向溢出，键盘焦点可见；96 个请求全部同源且无控制台错误、页面异常、失败请求或 HTTP 错误，仅保留已知 Three.js classic 弃用 warning 和 headless WebGL `ReadPixels` 性能 warning。
+- 2026-09-02 Playwright Chromium 静音无头回归：`tests/smoke-relationship-ux.py` 在 `--mute-audio --disable-audio-output` 下验证 `gaming`（跳过小游戏）与 `first_date` 两条路线。开始页静音按钮不会推进剧情，并与 HUD 状态同步；蒙太奇暂停后 900ms 状态和计时均不变，继续后两条路线均进入 `in_proposal`。无页面异常、失败请求或外链请求；仅保留已知 Three.js classic 弃用 warning 与 headless WebGL `ReadPixels` 性能 warning。
 
 ## 决策记录摘要
 
@@ -71,6 +72,7 @@ playing --script end--> ended
 | 2026-08-27 | 保留 Three.js r160，本地 vendoring，并提供 2D/skip 两级降级 | 保留 3D 体验，同时满足断网与 GPU 故障现场可靠性 | 升级 Three.js、改变渲染链路或包体预算 |
 | 2026-08-27 | BGM 默认显式为空 | 未提供授权音频时保持静默、保留合成 SFX 且不制造 404 | 加入任何真实 BGM |
 | 2026-08-28 | 角色槽位使用可取消定时器与版本校验，开始封面采用 C 双人游戏主视觉 | 消除快速推进竞态和跨段落重复角色，同时建立一致开场视觉 | 增加分身演出、改用 Canvas/WebGL 角色或替换封面结构 |
+| 2026-09-02 | 第一阶段关系体验增加开始前静音与可暂停照片蒙太奇；求婚拒绝改为稳定反馈，小游戏结果按事实传递 | 现场演示中误触接受、跳过后虚假成功文案和不可控长动画会削弱信任；控制逻辑集中在 Engine 并保持离线 | 增加蒙太奇重播/进度条、触屏小游戏输入、或替换音频资产时重新审查生命周期与焦点 |
 
 ## 下次审查触发器
 
