@@ -364,6 +364,55 @@ html,body{
   position:absolute;left:50%;bottom:8px;transform:translateX(-50%);
   font-size:18px;color:rgba(255,255,255,.5);
 }
+.mg-touch-controls{
+  position:absolute;inset:0;z-index:3;display:none;pointer-events:none;
+}
+.mg-touch-controls.is-visible{display:block;}
+.mg-joystick{
+  position:absolute;left:24px;bottom:94px;width:176px;height:176px;
+  border:2px solid rgba(79,195,247,.7);border-radius:50%;
+  background:radial-gradient(circle,rgba(79,195,247,.2),rgba(10,15,25,.52) 68%);
+  box-shadow:0 0 28px rgba(79,195,247,.25),inset 0 0 22px rgba(79,195,247,.12);
+  pointer-events:auto;touch-action:none;
+}
+.mg-joystick::before,.mg-joystick::after{
+  content:"";position:absolute;left:50%;top:50%;background:rgba(79,195,247,.24);pointer-events:none;
+}
+.mg-joystick::before{width:2px;height:72%;transform:translate(-50%,-50%);}
+.mg-joystick::after{width:72%;height:2px;transform:translate(-50%,-50%);}
+.mg-joystick-knob{
+  position:absolute;left:50%;top:50%;width:68px;height:68px;z-index:1;
+  border:2px solid #fff;border-radius:50%;background:rgba(79,195,247,.7);
+  box-shadow:0 0 20px rgba(79,195,247,.8);transform:translate(-50%,-50%);
+  transition:background 120ms ease,box-shadow 120ms ease;
+  pointer-events:none;
+}
+.mg-touch-actions{
+  position:absolute;right:24px;bottom:94px;display:flex;gap:12px;align-items:flex-end;
+  pointer-events:auto;touch-action:none;
+}
+.mg-touch-btn{
+  min-width:82px;min-height:72px;padding:12px 14px;
+  border:2px solid rgba(255,255,255,.55);border-radius:14px;
+  background:rgba(10,15,25,.82);color:#fff;cursor:pointer;
+  font:800 20px var(--font-stack);letter-spacing:2px;
+  box-shadow:0 0 16px rgba(0,0,0,.28);touch-action:none;
+  transition:background 140ms ease,border-color 140ms ease,transform 140ms ease;
+}
+.mg-touch-btn:active{transform:translateY(2px);background:rgba(79,195,247,.28);}
+.mg-touch-btn:focus-visible{outline:3px solid var(--ow-cyan);outline-offset:4px;}
+#mgTouchPurple{border-color:#c56cff;color:#e4c8ff;}
+#mgTouchYellow{border-color:#ffd84d;color:#fff1a8;}
+#mgTouchReverse{border-color:var(--ow-cyan);color:#c8f3ff;}
+@media (max-width:900px){
+  .mg-joystick{left:16px;bottom:86px;width:148px;height:148px;}
+  .mg-joystick-knob{width:58px;height:58px;}
+  .mg-touch-actions{right:16px;bottom:86px;gap:8px;}
+  .mg-touch-btn{min-width:72px;min-height:72px;padding:10px 8px;font-size:16px;}
+}
+@media (prefers-reduced-motion: reduce){
+  .mg-joystick-knob,.mg-touch-btn{transition:none;}
+}
 
 /* ============================================
    求婚终局
