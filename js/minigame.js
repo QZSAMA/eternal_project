@@ -27,6 +27,7 @@ const Minigame = {
   state: null,
   keys: {},
   mouse: { x: 0, y: 0, nx: 0, ny: 0, leftDown: false, rightDown: false },
+  touchInput: { pointerId: null, moveX: 0, moveY: 0, leftDown: false, rightDown: false, reverseHeld: false, supported: false },
   startTime: 0,
   lastFrame: 0,
   lastSpawn: 0,
@@ -95,6 +96,7 @@ const Minigame = {
     this.wrongShotCount = 0;
     this.hintShown = false;
     this.keys = {};
+    this._resetTouchInput();
     this.ended = false;
     this.endingPhase = 0;
     this.fallbackState = null;
@@ -105,6 +107,34 @@ const Minigame = {
     }
     const r = document.getElementById("mgResult");
     if (r) r.classList.remove("is-show");
+  },
+
+  _resetTouchInput() {
+    this.touchInput.pointerId = null;
+    this.touchInput.moveX = 0;
+    this.touchInput.moveY = 0;
+    this.touchInput.leftDown = false;
+    this.touchInput.rightDown = false;
+    this.touchInput.reverseHeld = false;
+    this.touchInput.supported = false;
+  },
+
+  _setTouchVector(clientX, clientY, rect) {
+    const x = Math.max(-1, Math.min(1, ((clientX - rect.left) / rect.width) * 2 - 1));
+    const y = Math.max(-1, Math.min(1, ((clientY - rect.top) / rect.height) * 2 - 1));
+    const length = Math.hypot(x, y);
+    if (length < 0.15) return { x: 0, y: 0 };
+    const scale = Math.min(1, length) / (length || 1);
+    return { x: x * scale, y: y * scale };
+  },
+
+  _setTouchAction(type, pressed) {
+    if (type === "purple") this.touchInput.leftDown = pressed;
+    if (type === "yellow") this.touchInput.rightDown = pressed;
+    if (type === "reverse") {
+      if (pressed && !this.touchInput.reverseHeld) this._reverseOrbs();
+      this.touchInput.reverseHeld = pressed;
+    }
   },
 
   _init2D() {
