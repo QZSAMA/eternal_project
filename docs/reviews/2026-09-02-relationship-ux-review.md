@@ -73,14 +73,14 @@
 - 建议修复：仅在获得授权后替换为透明 PNG/WebP，或提供明确抠图策略；发布包和截图脱敏。
 - 验证方式：机器检查尺寸/透明通道/水印，人工确认授权记录；未获授权前不把该项标记为已关闭。
 
-### PERF-007 [P2] Three.js classic build 与帧率耦合仍有维护成本
+### PERF-007 [P2] Three.js classic build 与低端设备维护成本
 
 - 文件/位置：`vendor/three-r160.min.js`、`js/minigame.js` 主循环
 - 可复现步骤：在 Chromium 控制台运行两条主线并观察 warning/低端设备帧率。
-- 实际结果：保留官方弃用 warning；3D 物理仍需持续按帧更新。
-- 影响：warning 增加排障噪声，低帧率设备上小游戏手感可能漂移。
-- 建议修复：后续迁移 ES module 并以 `dt` 驱动物理；保持当前 2D/skip 兜底。
-- 验证方式：升级后重新计算 vendored 哈希，并在高/低帧率模拟下比较速度与碰撞结果。
+- 实际结果：3D 移动、球体、敌人、粒子和拖尾已按受限 `dt` 更新；碰撞改为平方距离，粒子/拖尾有数量上限。Three.js classic build 仍会输出官方弃用 warning。
+- 影响：低帧率下的速度和寿命漂移已缓解，但旧版运行时 warning 与真实低端设备帧率风险仍存在。
+- 建议修复：后续迁移 ES module，并在真实低端设备上建立帧耗时基线；保持当前 2D/skip 兜底。
+- 验证方式：`tests/minigame-physics.test.js` 已覆盖 60/30 FPS 积分、dt 限制和效果预算；升级后重新计算 vendored 哈希，并补充高/低端实机对比。
 
 ## 发布建议
 

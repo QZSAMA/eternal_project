@@ -11,9 +11,9 @@
 | 基线提交 | `781f1da801db29fb6d8718a26c4a98ceb0ac4ba2` |
 | 运行方式 | 静态文件；发布前用 `python -m http.server 4173` 预览并做断网 smoke；`file://` 仅作便利入口 |
 | 运行时依赖 | 原生 JS/Web Audio/Canvas + 本地 `vendor/three-r160.min.js`；无运行时网络依赖 |
-| 测试现状 | Node 内置测试 35/35 通过，`npm run check` 通过；两条浏览器主线与触屏小游戏 smoke 已通过 |
+| 测试现状 | Node 内置测试 40/40 通过，`npm run check` 通过；两条浏览器主线与触屏小游戏 smoke 已通过 |
 | 资产现状 | 21 个图片文件，约 8.14 MB；BGM 默认显式空值，静默运行且不发起音频请求 |
-| 主要风险 | 3D 帧率耦合；角色 JPG 带背景/水印且授权待确认；Three.js classic build 有弃用警告 |
+| 主要风险 | 角色 JPG 带背景/水印且授权待确认；Three.js classic build 有弃用警告；低端设备仍需实机帧率验收 |
 
 ## 产品意图
 
@@ -62,6 +62,7 @@ playing --script end--> ended
 - 2026-08-28 Playwright Chromium 真实快速点击回归：`first_date` 与 `gaming + skip` 两条分支均通过，313 次推进/等待采样未出现重复可见角色；第一次见面分支进入公园后 `center` 已清空且 `right` 只有 `heroine`，游戏分支跳过后恢复到 `gaming[5]`，最新表情为 `hero:serious` 与 `heroine:laugh`，并完成蒙太奇到达求婚层。C 封面通过 1920×1080、1280×720 和 `prefers-reduced-motion: reduce` 复核，人物脸部完整，无水印、黑边、破图或横向溢出，键盘焦点可见；96 个请求全部同源且无控制台错误、页面异常、失败请求或 HTTP 错误，仅保留已知 Three.js classic 弃用 warning 和 headless WebGL `ReadPixels` 性能 warning。
 - 2026-09-02 Playwright Chromium 静音无头回归：`tests/smoke-relationship-ux.py` 在 `--mute-audio --disable-audio-output` 下验证 `gaming`（跳过小游戏）与 `first_date` 两条路线。开始页静音按钮不会推进剧情，并与 HUD 状态同步；蒙太奇暂停后 900ms 状态和计时均不变，继续后两条路线均进入 `in_proposal`。无页面异常、失败请求或外链请求；仅保留已知 Three.js classic 弃用 warning 与 headless WebGL `ReadPixels` 性能 warning。
 - 2026-09-02 Playwright Chromium 触屏无头回归：`tests/smoke-touch-minigame.py` 在 `has_touch=True`、强制 2D 模式下验证虚拟摇杆 pointerdown/move/cancel、紫球/黄球按下释放、反向按钮和跳过；桌面上下文确认触屏控件默认隐藏。无页面异常或失败请求，触屏与桌面路径均能回到主线。
+- 2026-09-02 `tests/minigame-physics.test.js` 验证 `dt` 限制、60/30 FPS 积分一致、3D 玩家移动一致、平方距离碰撞与特效队列上限；`npm test` 达到 40/40。3D 更新复用循环时间戳，粒子/拖尾超过预算时回收最旧对象。
 
 ## 决策记录摘要
 
@@ -75,6 +76,7 @@ playing --script end--> ended
 | 2026-08-28 | 角色槽位使用可取消定时器与版本校验，开始封面采用 C 双人游戏主视觉 | 消除快速推进竞态和跨段落重复角色，同时建立一致开场视觉 | 增加分身演出、改用 Canvas/WebGL 角色或替换封面结构 |
 | 2026-09-02 | 第一阶段关系体验增加开始前静音与可暂停照片蒙太奇；求婚拒绝改为稳定反馈，小游戏结果按事实传递 | 现场演示中误触接受、跳过后虚假成功文案和不可控长动画会削弱信任；控制逻辑集中在 Engine 并保持离线 | 增加蒙太奇重播/进度条、触屏小游戏输入、或替换音频资产时重新审查生命周期与焦点 |
 | 2026-09-02 | 触屏小游戏采用 Pointer Events + 虚拟摇杆/三按钮，并由 Three.js 与 2D 共用 `touchInput`；控件按触屏能力显示，绑定重复时先清理，缺失能力安全回退 | 让触屏设备可完成移动、瞄准、发射和反向，同时保留键鼠与 skip；统一状态避免两套规则漂移，幂等解绑防止重复点击 | 迁移输入设备、调整控件布局/手势、升级 Three.js 或改变小游戏规则时重新审查 |
+| 2026-09-02 | 3D 小游戏按受限 `dt` 推进，并以平方距离与粒子/拖尾上限降低热路径开销 | 消除低帧率下移动/寿命漂移，减少碰撞临时对象和特效无限增长；保持 60 FPS 手感与现有规则 | 改变速度/生命周期、引入固定时间步或对象池、迁移 Three.js ES Module 时重新基准测试 |
 
 ## 下次审查触发器
 
