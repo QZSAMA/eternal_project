@@ -75,7 +75,7 @@ def run_touch_controls(page):
     assert page.evaluate("Minigame.touchInput.rightDown") is False
 
     page.evaluate("Minigame.__reverseCalls = 0; Minigame._reverseOrbs = function () { Minigame.__reverseCalls += 1; }; void 0")
-    page.locator("#mgTouchReverse").dispatch_event("click")
+    page.locator("#mgTouchReverse").click(force=True)
     assert page.evaluate("Minigame.__reverseCalls") == 1
     page.locator("#mgSkip").dispatch_event("click")
     for _ in range(100):
