@@ -13,7 +13,10 @@ const Engine = {
   typewriterDone: true,
   photoCache: {},     // 探测过的照片：path → true/false
   selectedChoice: 0,
+  lastMinigameResult: null,
   rejectEscapeCount: 0,
+  proposalTipTimer: null,
+  montage: null,
   particleRAF: null,
   particles: [],
 
@@ -29,8 +32,9 @@ const Engine = {
       dialogueBox: $("dialogueBox"), nameTag: $("nameTag"), dialogueText: $("dialogueText"), dialogueArrow: $("dialogueArrow"),
       layerMenu: $("layerMenu"), choicePrompt: $("choicePrompt"), choiceList: $("choiceList"),
       effectFlash: $("effectFlash"), effectSpotlight: $("effectSpotlight"),
-      muteBtn: $("muteBtn"),
+      muteBtn: $("muteBtn"), startMuteBtn: $("startMuteBtn"),
       layerMontage: $("layerMontage"), montageImg: $("montageImg"), montageCaption: $("montageCaption"),
+      montageToggle: $("montageToggle"), montageStatus: $("montageStatus"),
       layerMinigame: $("layerMinigame"),
       layerProposal: $("layerProposal"), ringWrap: $("ringWrap"), proposalText: $("proposalText"),
       proposalBtns: $("proposalBtns"), btnAccept: $("btnAccept"), btnReject: $("btnReject"), rejectTip: $("rejectTip"),
@@ -52,12 +56,23 @@ const Engine = {
     this.dom.startTitle.textContent = data.meta.title.replace(/[{}]/g, "");
     this.dom.endingMeta.textContent = `${data.meta.endingLine.replace(/[{}]/g, "")}\n${data.meta.proposalDate.replace(/[{}]/g, "")}`;
 
-    // 静音按钮
-    this.dom.muteBtn.addEventListener("click", () => {
+    // 静音按钮（开始页和 HUD 共用同一状态）
+    const toggleMute = (event) => {
+      if (event && event.stopPropagation) event.stopPropagation();
       GameAudio.setMuted(!GameAudio.muted);
-      this.dom.muteBtn.classList.toggle("is-muted", GameAudio.muted);
-      this.dom.muteBtn.textContent = GameAudio.muted ? "×" : "♪";
-    });
+      this._syncMuteButtons();
+    };
+    if (this.dom.muteBtn) this.dom.muteBtn.addEventListener("click", toggleMute);
+    if (this.dom.startMuteBtn) this.dom.startMuteBtn.addEventListener("click", toggleMute);
+    this._syncMuteButtons();
+
+    // 蒙太奇暂停/继续
+    if (this.dom.montageToggle) {
+      this.dom.montageToggle.addEventListener("click", (event) => {
+        if (event && event.stopPropagation) event.stopPropagation();
+        this._toggleMontagePause();
+      });
+    }
 
     // 开始按钮
     this.dom.startBtn.addEventListener("click", () => {
@@ -209,6 +224,15 @@ const Engine = {
 
   _charSlots() {
     return [this.dom.charLeft, this.dom.charCenter, this.dom.charRight].filter(Boolean);
+  },
+
+  _syncMuteButtons() {
+    const muted = Boolean(GameAudio.muted);
+    [this.dom.muteBtn, this.dom.startMuteBtn].filter(Boolean).forEach(button => {
+      button.classList.toggle("is-muted", muted);
+      button.textContent = muted ? "×" : "♪";
+      button.setAttribute("aria-pressed", String(muted));
+    });
   },
 
   _invalidateCharSlot(slot) {
@@ -407,7 +431,8 @@ const Engine = {
       this._fail(`找不到小游戏配置：${gameId || "(empty)"}`);
       return;
     }
-    this.callMinigame(gameCfg, () => {
+    this.callMinigame(gameCfg, (result) => {
+      this.lastMinigameResult = ["win", "skipped", "timeout"].includes(result) ? result : "skipped";
       this.pc++;
       this._next();
     });
@@ -445,9 +470,11 @@ const Engine = {
 
   // ============ montage ============
   _montage(arg) {
+    this._clearMontageTimers();
     this.state = "in_montage";
     this.dom.dialogueBox.classList.remove("is-show");
     this.dom.layerMontage.style.display = "block";
+    this.dom.layerMontage.classList.remove("is-paused");
     if (arg.bgm) GameAudio.bgm(arg.bgm, 1500);
 
     // 过滤掉探测失败的照片
@@ -456,30 +483,150 @@ const Engine = {
       return this.photoCache[path] !== false;
     });
 
-    let idx = 0;
-    const playSlide = () => {
-      if (idx >= slides.length) {
-        this.dom.layerMontage.style.display = "none";
-        this.dom.montageImg.classList.remove("is-active");
-        this.dom.montageCaption.classList.remove("is-show");
-        this.state = "playing";
-        this.pc++;
-        this._next();
-        return;
-      }
-      const s = slides[idx];
-      const path = this._photoPath(s.img);
-      this.dom.montageImg.style.backgroundImage = `url(${path})`;
-      this.dom.montageCaption.textContent = s.caption.replace(/[{}]/g, "");
-      this.dom.montageImg.classList.add("is-active");
-      setTimeout(() => this.dom.montageCaption.classList.add("is-show"), 600);
-      setTimeout(() => {
-        this.dom.montageCaption.classList.remove("is-show");
-        this.dom.montageImg.classList.remove("is-active");
-        setTimeout(() => { idx++; playSlide(); }, 800);
-      }, 3500);
+    this.montage = {
+      slides,
+      idx: 0,
+      paused: false,
+      timerId: null,
+      dueAt: 0,
+      action: null,
+      remaining: 0,
     };
-    playSlide();
+    this._syncMontageControls();
+    this._playMontageSlide();
+  },
+
+  _scheduleMontageAction(action, delay) {
+    const session = this.montage;
+    if (!session || session.paused) return;
+    this._clearMontageTimers();
+    session.action = action;
+    session.remaining = Math.max(0, delay);
+    session.dueAt = performance.now() + session.remaining;
+    session.timerId = setTimeout(() => {
+      if (this.montage !== session || session.paused) return;
+      session.timerId = null;
+      session.dueAt = 0;
+      session.remaining = 0;
+      const nextAction = session.action;
+      session.action = null;
+      if (nextAction) nextAction();
+    }, session.remaining);
+  },
+
+  _clearMontageTimers() {
+    const session = this.montage;
+    if (!session) return;
+    if (session.timerId != null) clearTimeout(session.timerId);
+    session.timerId = null;
+  },
+
+  _playMontageSlide() {
+    const session = this.montage;
+    if (!session || session.paused) return;
+    if (session.idx >= session.slides.length) {
+      this._finishMontageSlide();
+      return;
+    }
+
+    const slide = session.slides[session.idx];
+    const path = this._photoPath(slide.img);
+    this.dom.montageImg.style.backgroundImage = `url(${path})`;
+    this.dom.montageCaption.textContent = (slide.caption || "").replace(/[{}]/g, "");
+    this.dom.montageCaption.classList.remove("is-show");
+    this.dom.montageImg.classList.add("is-active");
+
+    // 图片先出现，字幕延迟 600ms，再保留 2.9s 后进入下一张。
+    this._scheduleMontageAction(() => {
+      if (!this.montage || this.montage.paused) return;
+      this.dom.montageCaption.classList.add("is-show");
+      this._scheduleMontageAction(() => {
+        if (!this.montage || this.montage.paused) return;
+        this.dom.montageCaption.classList.remove("is-show");
+        this.dom.montageImg.classList.remove("is-active");
+        this._scheduleMontageAction(() => {
+          if (!this.montage || this.montage.paused) return;
+          this.montage.idx++;
+          this._playMontageSlide();
+        }, 800);
+      }, 2900);
+    }, 600);
+  },
+
+  _finishMontageSlide() {
+    this._clearMontageTimers();
+    if (this.dom.layerMontage) {
+      this.dom.layerMontage.classList.remove("is-paused");
+      this.dom.layerMontage.style.display = "none";
+    }
+    if (this.dom.montageImg) {
+      this.dom.montageImg.classList.remove("is-active");
+      this.dom.montageImg.style.opacity = "";
+      this.dom.montageImg.style.transition = "";
+    }
+    if (this.dom.montageCaption) {
+      this.dom.montageCaption.classList.remove("is-show");
+      this.dom.montageCaption.style.opacity = "";
+      this.dom.montageCaption.style.transition = "";
+    }
+    this.montage = null;
+    this._syncMontageControls(true);
+    this.state = "playing";
+    this.pc++;
+    this._next();
+  },
+
+  _freezeMontageVisuals() {
+    const layer = this.dom.layerMontage;
+    if (!layer) return;
+    layer.classList.add("is-paused");
+    [this.dom.montageImg, this.dom.montageCaption].filter(Boolean).forEach(node => {
+      if (window.getComputedStyle) node.style.opacity = window.getComputedStyle(node).opacity;
+      node.style.transition = "none";
+    });
+  },
+
+  _releaseMontageVisuals() {
+    const layer = this.dom.layerMontage;
+    if (layer) layer.classList.remove("is-paused");
+    [this.dom.montageImg, this.dom.montageCaption].filter(Boolean).forEach(node => {
+      node.style.opacity = "";
+      node.style.transition = "";
+    });
+  },
+
+  _toggleMontagePause() {
+    const session = this.montage;
+    if (!session || this.state !== "in_montage") return;
+    if (session.paused) {
+      session.paused = false;
+      this._releaseMontageVisuals();
+      this._syncMontageControls();
+      if (session.action) this._scheduleMontageAction(session.action, session.remaining);
+      else this._playMontageSlide();
+      return;
+    }
+
+    session.paused = true;
+    if (session.timerId != null) {
+      session.remaining = Math.max(0, session.dueAt - performance.now());
+      this._clearMontageTimers();
+    }
+    this._freezeMontageVisuals();
+    this._syncMontageControls();
+  },
+
+  _syncMontageControls(completed = false) {
+    const session = this.montage;
+    const paused = Boolean(session && session.paused);
+    if (this.dom.montageToggle) {
+      this.dom.montageToggle.textContent = paused ? "继续" : "暂停";
+      this.dom.montageToggle.setAttribute("aria-label", paused ? "继续照片蒙太奇" : "暂停照片蒙太奇");
+      this.dom.montageToggle.setAttribute("aria-pressed", String(paused));
+    }
+    if (this.dom.montageStatus) {
+      this.dom.montageStatus.textContent = completed ? "播放完成" : (paused ? "已暂停" : "播放中");
+    }
   },
 
   _photoPath(key) {
@@ -504,12 +651,14 @@ const Engine = {
     this.dom.dialogueBox.classList.remove("is-show");
     this.dom.effectSpotlight.classList.add("is-on");
     this.dom.layerProposal.classList.add("is-show");
+    this.dom.btnReject.style.transform = "";
+    this.dom.btnReject.textContent = "让我想想…";
+    this.dom.btnReject.setAttribute("aria-pressed", "false");
 
     setTimeout(() => this.dom.ringWrap.classList.add("is-show"), 500);
     setTimeout(() => this.dom.proposalText.classList.add("is-show"), 2200);
     setTimeout(() => {
       this.dom.proposalBtns.classList.add("is-show");
-      this.dom.btnAccept.focus();
       this._startRejectEscape();
     }, 3200);
 
@@ -519,30 +668,23 @@ const Engine = {
 
   _startRejectEscape() {
     const reject = this.dom.btnReject;
-    const tips = [
-      "（系统提示：该选项在当前剧情线不可用，因为他真的很爱你）",
-      "再想想？",
-      "不许选这个哦",
-      "这个按钮只是装饰…",
-      "嗯？再考虑一下嘛",
-    ];
-    const escape = () => {
+    const showHold = () => {
       this.rejectEscapeCount++;
-      const tip = tips[Math.min(this.rejectEscapeCount - 1, tips.length - 1)];
-      this.dom.rejectTip.textContent = tip;
+      this.dom.rejectTip.textContent = "没关系，我们可以慢慢来。";
       this.dom.rejectTip.classList.add("is-show");
-      // 随机移动
-      const maxX = 600, maxY = 300;
-      const dx = (Math.random() - 0.5) * maxX;
-      const dy = (Math.random() - 0.5) * maxY;
-      reject.style.transform = `translate(${dx}px, ${dy}px)`;
-      reject.textContent = ["让我想想…", "咦？", "啊这", "别点我", "再想想？"][Math.min(this.rejectEscapeCount, 4)];
-      GameAudio.sfx("hit");
-      setTimeout(() => this.dom.rejectTip.classList.remove("is-show"), 2000);
+      reject.style.transform = "";
+      reject.textContent = "让我想想…";
+      if (this.proposalTipTimer) clearTimeout(this.proposalTipTimer);
+      this.proposalTipTimer = setTimeout(() => this.dom.rejectTip.classList.remove("is-show"), 2400);
     };
-    reject.addEventListener("mouseenter", escape);
-    reject.addEventListener("click", escape);
-    reject.addEventListener("focus", escape);
+    reject.addEventListener("click", showHold);
+  },
+
+  _showProposalHold() {
+    this.dom.rejectTip.textContent = "没关系，我们可以慢慢来。";
+    this.dom.rejectTip.classList.add("is-show");
+    if (this.proposalTipTimer) clearTimeout(this.proposalTipTimer);
+    this.proposalTipTimer = setTimeout(() => this.dom.rejectTip.classList.remove("is-show"), 2400);
   },
 
   _accept() {
@@ -579,14 +721,14 @@ const Engine = {
     // 点击推进
     this.dom.stage.addEventListener("click", (e) => {
       // 点击 UI 元素不推进
-      if (e.target.closest("button, .choice-btn, .mg-skip, .hud-btn, .btn-accept, .btn-reject, .start-btn")) return;
+      if (e.target.closest("button, .choice-btn, .mg-skip, .hud-btn, .btn-accept, .btn-reject, .start-btn, .start-mute, .montage-toggle")) return;
       if (this.state === "in_minigame" || this.state === "in_montage" || this.state === "in_proposal" || this.state === "ended") return;
       if (this.state === "waiting_choice") return;
       this.advance();
     });
     // 触屏
     this.dom.stage.addEventListener("touchstart", (e) => {
-      if (e.target.closest("button, .choice-btn, .mg-skip, .hud-btn, .btn-accept, .btn-reject, .start-btn")) return;
+      if (e.target.closest("button, .choice-btn, .mg-skip, .hud-btn, .btn-accept, .btn-reject, .start-btn, .start-mute, .montage-toggle")) return;
       if (this.state === "waiting_input") {
         e.preventDefault();
         this.advance();
@@ -607,6 +749,16 @@ const Engine = {
         if (e.code === "ArrowUp") { e.preventDefault(); this._moveChoice(-1); }
         else if (e.code === "ArrowDown") { e.preventDefault(); this._moveChoice(1); }
         else if (e.code === "Enter") { e.preventDefault(); this.choose(this.selectedChoice); }
+      } else if (this.state === "in_montage") {
+        // 聚焦按钮时交给按钮自身的 click，避免 Enter/Space 双重切换。
+        if (e.target && e.target.closest && e.target.closest("#montageToggle")) return;
+        if (e.code === "Space" || e.code === "Enter") {
+          e.preventDefault();
+          this._toggleMontagePause();
+        }
+      } else if (this.state === "in_proposal" && e.code === "Escape") {
+        e.preventDefault();
+        this._showProposalHold();
       }
     });
   },

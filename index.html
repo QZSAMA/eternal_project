@@ -52,13 +52,17 @@
 
     <!-- HUD 层：静音按钮 -->
     <div class="layer-hud" id="layerHud">
-      <button class="hud-btn" id="muteBtn" title="静音切换" aria-label="静音切换">♪</button>
+      <button class="hud-btn" id="muteBtn" title="静音切换" aria-label="静音切换" aria-pressed="false">♪</button>
     </div>
 
     <!-- 蒙太奇层 -->
     <div class="layer-montage" id="layerMontage">
       <div class="montage-img" id="montageImg"></div>
       <div class="montage-caption" id="montageCaption"></div>
+      <div class="montage-controls" aria-label="照片蒙太奇控制">
+        <button class="montage-toggle" id="montageToggle" type="button" aria-label="暂停照片蒙太奇" aria-pressed="false">暂停</button>
+        <span class="montage-status" id="montageStatus" role="status" aria-live="polite">播放中</span>
+      </div>
     </div>
 
     <!-- 小游戏层：逆转的奶 -->
@@ -104,7 +108,7 @@
       <div class="proposal-text" id="proposalText">嫁给我，好吗？</div>
       <div class="proposal-btns" id="proposalBtns">
         <button class="btn-accept" id="btnAccept" type="button">我愿意 ♥</button>
-        <button class="btn-reject" id="btnReject" type="button">让我想想…</button>
+        <button class="btn-reject" id="btnReject" type="button" aria-label="让我想想">让我想想…</button>
       </div>
       <div class="reject-tip" id="rejectTip"></div>
     </div>
@@ -141,6 +145,7 @@
           <span>开始双人旅程</span>
         </button>
       </div>
+      <button class="start-mute" id="startMuteBtn" type="button" title="静音切换" aria-label="静音切换" aria-pressed="false">♪</button>
       <div class="start-sync" aria-hidden="true">
         <span>SYNC RATE</span><strong>100%</strong><small>PLAYER 1 + PLAYER 2</small>
       </div>

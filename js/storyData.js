@@ -147,9 +147,9 @@ const CONFIG = {
       { say: { who: "heroine", expr: "normal", text: "这局你莫伊拉好好奶我啊，我小美要冲了。" } },
       { say: { who: "hero", expr: "smile", text: "放心，这次我紫球和黄球都给你安排上！" } },
       { call: { minigame: "default" } },
-      { say: { who: "heroine", expr: "laugh", text: "哎，你今天居然真的奶到我了。" } },
-      { say: { who: "hero", expr: "smile", text: "说了这次一定奶到你嘛。" } },
-      { say: { who: "heroine", expr: "shy", text: "那以后每一局，都要这样奶我哦。" } },
+      { say: { who: "heroine", expr: "laugh", text: "哎，和你一起组队就是最开心的事。" } },
+      { say: { who: "hero", expr: "smile", text: "不管结果怎样，我都想和你一起走完每一局。" } },
+      { say: { who: "heroine", expr: "shy", text: "那以后每一局，都要这样陪着我哦。" } },
       { jump: { label: "from_game_to_real" } },
     ],
 

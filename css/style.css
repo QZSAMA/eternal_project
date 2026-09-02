@@ -242,6 +242,21 @@ html,body{
   opacity:0;transition:opacity 800ms ease-out;letter-spacing:2px;
 }
 .montage-caption.is-show{opacity:1;}
+.layer-montage.is-paused .montage-img{animation-play-state:paused;}
+.montage-controls{
+  position:absolute;right:48px;bottom:42px;z-index:2;
+  display:flex;align-items:center;gap:16px;
+  pointer-events:auto;
+}
+.montage-toggle{
+  min-width:116px;padding:12px 20px;
+  border:1px solid rgba(255,255,255,.55);border-radius:999px;
+  background:rgba(12,14,24,.72);color:#fff;cursor:pointer;
+  font:700 18px var(--font-stack);letter-spacing:2px;
+  backdrop-filter:blur(8px);transition:background 180ms ease,border-color 180ms ease,transform 180ms ease;
+}
+.montage-toggle:hover{transform:translateY(-2px);background:rgba(79,195,247,.2);border-color:var(--ow-cyan);}
+.montage-status{color:rgba(255,255,255,.7);font-size:16px;letter-spacing:2px;}
 
 /* ============================================
    小游戏
@@ -508,6 +523,15 @@ html,body{
   box-shadow:0 0 22px rgba(255,104,78,.58);font-size:14px;text-indent:2px;
 }
 .start-btn:hover{transform:translateY(-3px);background:rgba(126,230,255,.16);border-color:var(--start-cyan);}
+.start-mute{
+  position:absolute;z-index:3;right:76px;top:36px;
+  width:56px;height:56px;border:1px solid rgba(126,230,255,.58);border-radius:50%;
+  background:rgba(12,14,35,.72);color:var(--start-cyan);font-size:24px;cursor:pointer;
+  box-shadow:0 0 22px rgba(126,230,255,.16);backdrop-filter:blur(8px);
+  transition:background 180ms ease,border-color 180ms ease,color 180ms ease,transform 180ms ease;
+}
+.start-mute:hover{transform:translateY(-2px);background:rgba(126,230,255,.16);border-color:var(--start-cyan);}
+.start-mute.is-muted{color:#8a93a3;text-decoration:line-through;}
 .start-sync{
   position:absolute;z-index:3;right:76px;top:106px;display:flex;flex-direction:column;width:170px;
   color:rgba(206,235,255,.62);font-size:12px;letter-spacing:3px;
