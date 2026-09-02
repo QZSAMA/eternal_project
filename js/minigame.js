@@ -103,7 +103,7 @@ const Minigame = {
     const hintEl = document.getElementById("mgHint");
     if (hintEl) {
       hintEl.style.display = "block";
-      hintEl.textContent = "左键 紫球(打敌人) · 右键 黄球(奶) · 按 E 让球反方向飞回 · 奶到身后的小美即可通关";
+      hintEl.textContent = "左键 紫球(打敌人) · 右键 黄球(奶) · 按 E 让球反方向飞回 · 触屏使用摇杆和按钮";
     }
     const r = document.getElementById("mgResult");
     if (r) r.classList.remove("is-show");
@@ -153,9 +153,9 @@ const Minigame = {
       lastSpawn: 0,
     };
     const hintEl = document.getElementById("mgHint");
-    if (hintEl) hintEl.textContent = "2D 兼容模式：WASD 移动 · 点击发射 · 按 E 让球反向飞回小美 · 也可跳过";
+    if (hintEl) hintEl.textContent = "2D 兼容模式：WASD 移动 · 点击发射 · 按 E 让球反向飞回小美 · 触屏使用摇杆和按钮 · 也可跳过";
     const canvasEl = document.getElementById("minigameCanvas");
-    if (canvasEl) canvasEl.setAttribute("aria-label", "2D 兼容模式：使用 WASD 移动，点击发射球，按 E 反向球体");
+    if (canvasEl) canvasEl.setAttribute("aria-label", "2D 兼容模式：使用 WASD 移动，点击发射球，按 E 反向球体；触屏使用摇杆和按钮");
   },
 
   _initThree() {
@@ -318,6 +318,157 @@ const Minigame = {
     return g;
   },
 
+  _touchCapable() {
+    const points = Number((window.navigator && window.navigator.maxTouchPoints) || 0);
+    const coarse = window.matchMedia && window.matchMedia("(pointer: coarse)").matches;
+    return points > 0 || Boolean(coarse);
+  },
+
+  _syncTouchControlsVisibility() {
+    const controls = document.getElementById("mgTouchControls");
+    if (!controls || !controls.classList || !controls.classList.toggle) return;
+    controls.classList.toggle("is-visible", Boolean(this.touchInput.supported));
+  },
+
+  _setJoystickFromEvent(event) {
+    const joystick = document.getElementById("mgJoystick");
+    const knob = document.getElementById("mgJoystickKnob");
+    if (!joystick || !joystick.getBoundingClientRect) return;
+    const vector = this._setTouchVector(event.clientX, event.clientY, joystick.getBoundingClientRect());
+    this.touchInput.moveX = vector.x;
+    this.touchInput.moveY = vector.y;
+    if (knob && knob.style) {
+      const maxOffset = Math.max(24, Math.min(46, joystick.getBoundingClientRect().width * 0.26));
+      knob.style.transform = `translate(calc(-50% + ${vector.x * maxOffset}px), calc(-50% + ${vector.y * maxOffset}px))`;
+    }
+  },
+
+  _releaseTouchJoystick(pointerId) {
+    if (pointerId !== this.touchInput.pointerId) return;
+    const joystick = document.getElementById("mgJoystick");
+    if (joystick && joystick.releasePointerCapture) {
+      try { joystick.releasePointerCapture(pointerId); } catch (error) { /* capture may already be released */ }
+    }
+    this.touchInput.pointerId = null;
+    this.touchInput.moveX = 0;
+    this.touchInput.moveY = 0;
+    const knob = document.getElementById("mgJoystickKnob");
+    if (knob && knob.style) knob.style.transform = "translate(-50%,-50%)";
+  },
+
+  _bindTouchInputs() {
+    // A game restart can invoke start() again without a full stop(). Remove
+    // the previous pointer handlers first so actions stay edge-triggered.
+    if (this.bound.touchNodes && this.bound.touchNodes.length) this._unbindTouchInputs();
+    const controls = document.getElementById("mgTouchControls");
+    const joystick = document.getElementById("mgJoystick");
+    if (!controls || !joystick || typeof window.PointerEvent !== "function" || !this._touchCapable()) {
+      this._syncTouchControlsVisibility();
+      return;
+    }
+
+    this.touchInput.supported = true;
+    this._syncTouchControlsVisibility();
+    this.bound.touchNodes = [];
+    const bind = (node, type, handler) => {
+      if (!node || !node.addEventListener) return;
+      node.addEventListener(type, handler);
+      this.bound.touchNodes.push({ node, type, handler });
+    };
+
+    this.bound.touchJoyDown = (event) => {
+      if (this.touchInput.pointerId !== null) return;
+      event.preventDefault();
+      this.touchInput.pointerId = event.pointerId;
+      if (joystick.setPointerCapture) {
+        try { joystick.setPointerCapture(event.pointerId); } catch (error) { /* optional API */ }
+      }
+      this._setJoystickFromEvent(event);
+    };
+    this.bound.touchJoyMove = (event) => {
+      if (event.pointerId === this.touchInput.pointerId) {
+        event.preventDefault();
+        this._setJoystickFromEvent(event);
+      }
+    };
+    this.bound.touchJoyEnd = (event) => this._releaseTouchJoystick(event.pointerId);
+    this.bound.touchActionEnd = () => {
+      this._setTouchAction("purple", false);
+      this._setTouchAction("yellow", false);
+    };
+    this.bound.touchPurpleDown = (event) => { event.preventDefault(); this._setTouchAction("purple", true); };
+    this.bound.touchPurpleUp = () => this._setTouchAction("purple", false);
+    this.bound.touchYellowDown = (event) => { event.preventDefault(); this._setTouchAction("yellow", true); };
+    this.bound.touchYellowUp = () => this._setTouchAction("yellow", false);
+    this.bound.touchPurpleKeyDown = (event) => {
+      if (event.code === "Space" || event.code === "Enter") { event.preventDefault(); this._setTouchAction("purple", true); }
+    };
+    this.bound.touchPurpleKeyUp = (event) => {
+      if (event.code === "Space" || event.code === "Enter") this._setTouchAction("purple", false);
+    };
+    this.bound.touchYellowKeyDown = (event) => {
+      if (event.code === "Space" || event.code === "Enter") { event.preventDefault(); this._setTouchAction("yellow", true); }
+    };
+    this.bound.touchYellowKeyUp = (event) => {
+      if (event.code === "Space" || event.code === "Enter") this._setTouchAction("yellow", false);
+    };
+    this.bound.touchReverse = (event) => {
+      event.preventDefault();
+      this._setTouchAction("reverse", true);
+      this._setTouchAction("reverse", false);
+    };
+
+    bind(joystick, "pointerdown", this.bound.touchJoyDown);
+    bind(joystick, "pointermove", this.bound.touchJoyMove);
+    bind(joystick, "pointerup", this.bound.touchJoyEnd);
+    bind(joystick, "pointercancel", this.bound.touchJoyEnd);
+    const purple = document.getElementById("mgTouchPurple");
+    const yellow = document.getElementById("mgTouchYellow");
+    const reverse = document.getElementById("mgTouchReverse");
+    bind(purple, "pointerdown", this.bound.touchPurpleDown);
+    bind(purple, "pointerup", this.bound.touchPurpleUp);
+    bind(purple, "pointercancel", this.bound.touchPurpleUp);
+    bind(purple, "keydown", this.bound.touchPurpleKeyDown);
+    bind(purple, "keyup", this.bound.touchPurpleKeyUp);
+    bind(yellow, "pointerdown", this.bound.touchYellowDown);
+    bind(yellow, "pointerup", this.bound.touchYellowUp);
+    bind(yellow, "pointercancel", this.bound.touchYellowUp);
+    bind(yellow, "keydown", this.bound.touchYellowKeyDown);
+    bind(yellow, "keyup", this.bound.touchYellowKeyUp);
+    bind(reverse, "click", this.bound.touchReverse);
+    bind(window, "pointerup", this.bound.touchActionEnd);
+    bind(window, "pointercancel", this.bound.touchActionEnd);
+  },
+
+  _unbindTouchInputs() {
+    (this.bound.touchNodes || []).forEach(({ node, type, handler }) => {
+      if (node && node.removeEventListener) node.removeEventListener(type, handler);
+    });
+    this.bound.touchNodes = [];
+    this._resetTouchInput();
+    this._syncTouchControlsVisibility();
+  },
+
+  _readMoveVector() {
+    if (this.touchInput.pointerId !== null) {
+      return { mx: this.touchInput.moveX, my: this.touchInput.moveY };
+    }
+    let mx = 0;
+    let my = 0;
+    if (this.keys["KeyW"] || this.keys["ArrowUp"]) my -= 1;
+    if (this.keys["KeyS"] || this.keys["ArrowDown"]) my += 1;
+    if (this.keys["KeyA"] || this.keys["ArrowLeft"]) mx -= 1;
+    if (this.keys["KeyD"] || this.keys["ArrowRight"]) mx += 1;
+    return { mx, my };
+  },
+
+  _readAimVector() {
+    if (this.touchInput.pointerId !== null && (this.touchInput.moveX || this.touchInput.moveY)) {
+      return { x: this.touchInput.moveX, y: this.touchInput.moveY, active: true };
+    }
+    return { x: this.mouse.nx, y: this.mouse.ny, active: false };
+  },
+
   _spawnParticles(x, y, z, color, n) {
     for (let i = 0; i < n; i++) {
       const m = new THREE.Mesh(
@@ -393,6 +544,7 @@ const Minigame = {
     c.addEventListener("contextmenu", this.bound.ctx);
     const skipBtn = document.getElementById("mgSkip");
     if (skipBtn) skipBtn.addEventListener("click", this.bound.skip);
+    this._bindTouchInputs();
   },
 
   _unbindInputs() {
@@ -405,6 +557,7 @@ const Minigame = {
     c.removeEventListener("contextmenu", this.bound.ctx);
     const skipBtn = document.getElementById("mgSkip");
     if (skipBtn) skipBtn.removeEventListener("click", this.bound.skip);
+    this._unbindTouchInputs();
   },
 
   stop() {
@@ -454,11 +607,9 @@ const Minigame = {
     if (this.timeLeft <= 0) { this._startEnd("timeout"); return; }
 
     // 玩家移动（WASD 相对世界，简化）
-    let mx = 0, my = 0;
-    if (this.keys["KeyW"] || this.keys["ArrowUp"]) my -= 1;
-    if (this.keys["KeyS"] || this.keys["ArrowDown"]) my += 1;
-    if (this.keys["KeyA"] || this.keys["ArrowLeft"]) mx -= 1;
-    if (this.keys["KeyD"] || this.keys["ArrowRight"]) mx += 1;
+    const move = this._readMoveVector();
+    const mx = move.mx;
+    const my = move.my;
     if (mx || my) {
       const len = Math.hypot(mx, my) || 1;
       const sp = (this.cfg.playerSpeed || 4) * 0.06;
@@ -471,7 +622,8 @@ const Minigame = {
 
     // 朝向：基于鼠标位置（屏幕中心=正前方）
     // 鼠标在屏幕的位置决定朝向角度
-    const facing = Math.atan2(this.mouse.nx, -this.mouse.ny);
+    const aim = this._readAimVector();
+    const facing = Math.atan2(aim.x, -aim.y);
     this.player.facing = facing;
     this.player.rotation.y = facing;
 
@@ -488,11 +640,11 @@ const Minigame = {
 
     // 射击
     const nowShot = performance.now();
-    if (this.mouse.leftDown && nowShot - this.lastShot > this.cfg.fireRate) {
+    if ((this.mouse.leftDown || this.touchInput.leftDown) && nowShot - this.lastShot > this.cfg.fireRate) {
       this.lastShot = nowShot;
       this._fireOrb("purple");
     }
-    if (this.mouse.rightDown && nowShot - this.lastShot > this.cfg.fireRate) {
+    if ((this.mouse.rightDown || this.touchInput.rightDown) && nowShot - this.lastShot > this.cfg.fireRate) {
       this.lastShot = nowShot;
       this._fireOrb("yellow");
       this.wrongShotCount++;
@@ -648,11 +800,9 @@ const Minigame = {
     this.timeLeft = Math.max(0, this.cfg.duration - (performance.now() - this.startTime) / 1000);
     if (this.timeLeft <= 0) { this._startEnd("timeout"); return; }
 
-    let mx = 0, my = 0;
-    if (this.keys["KeyW"] || this.keys["ArrowUp"]) my -= 1;
-    if (this.keys["KeyS"] || this.keys["ArrowDown"]) my += 1;
-    if (this.keys["KeyA"] || this.keys["ArrowLeft"]) mx -= 1;
-    if (this.keys["KeyD"] || this.keys["ArrowRight"]) mx += 1;
+    const move = this._readMoveVector();
+    const mx = move.mx;
+    const my = move.my;
     const speed = (this.cfg.playerSpeed || 4) * 60;
     if (mx || my) {
       const length = Math.hypot(mx, my) || 1;
@@ -660,20 +810,26 @@ const Minigame = {
       state.player.y = Math.max(30, Math.min(690, state.player.y + (my / length) * speed * seconds));
     }
 
-    const dx = this.mouse.x - state.player.x;
-    const dy = this.mouse.y - state.player.y;
-    const aimLength = Math.hypot(dx, dy) || 1;
-    state.player.facingX = dx / aimLength;
-    state.player.facingY = dy / aimLength;
+    const aim = this._readAimVector();
+    if (aim.active) {
+      state.player.facingX = aim.x;
+      state.player.facingY = aim.y;
+    } else {
+      const dx = this.mouse.x - state.player.x;
+      const dy = this.mouse.y - state.player.y;
+      const aimLength = Math.hypot(dx, dy) || 1;
+      state.player.facingX = dx / aimLength;
+      state.player.facingY = dy / aimLength;
+    }
     state.mei.x = state.player.x - state.player.facingX * (this.cfg.meiDistance || 80);
     state.mei.y = state.player.y - state.player.facingY * (this.cfg.meiDistance || 80);
 
     const now = performance.now();
-    if (this.mouse.leftDown && now - this.lastShot > (this.cfg.fireRate || 400)) {
+    if ((this.mouse.leftDown || this.touchInput.leftDown) && now - this.lastShot > (this.cfg.fireRate || 400)) {
       this.lastShot = now;
       this._fireOrb2D("purple");
     }
-    if (this.mouse.rightDown && now - this.lastShot > (this.cfg.fireRate || 400)) {
+    if ((this.mouse.rightDown || this.touchInput.rightDown) && now - this.lastShot > (this.cfg.fireRate || 400)) {
       this.lastShot = now;
       this._fireOrb2D("yellow");
       this.wrongShotCount++;
