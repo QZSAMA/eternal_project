@@ -1,17 +1,18 @@
 # 第一阶段关系体验优化复审
 
 - 日期：2026-09-02
-- 范围：`feat/cover-character-layering` 在 `4674f8d` 之后的未提交改动
-- 结论：第一阶段四项现场可靠性问题已关闭；仍不建议在未确认素材授权和触屏输入前作为最终公开版本发布。
+- 范围：`feat/cover-character-layering` 在 `4674f8d` 之后的关系体验与触屏小游戏改动
+- 结论：第一阶段五项现场可靠性问题已关闭；正式公开前仍需完成素材授权/脱敏和低端设备帧率验收。
 
 ## 验证摘要
 
 | 检查 | 结果 |
 |---|---|
-| `npm test` | 28/28 通过 |
+| `npm test` | 35/35 通过 |
 | `npm run check` | 通过 |
 | `git diff --check` | 通过（仅换行格式提示） |
 | 静音无头 Chromium | `tests/smoke-relationship-ux.py` 通过：`gaming`（跳过小游戏）和 `first_date` 均能暂停/继续蒙太奇并进入求婚层 |
+| 触屏无头 Chromium | `tests/smoke-touch-minigame.py` 通过：触屏 2D 模式摇杆、紫球/黄球、反向、跳过；桌面端控件隐藏 |
 | 网络/异常 | 无外链请求、页面异常、失败请求；保留已知 Three.js classic 弃用和 headless WebGL `ReadPixels` 性能 warning |
 
 ## 已关闭问题
@@ -52,16 +53,16 @@
 - 修复：引入单一可恢复 pending action 和剩余时间；按钮、Space、Enter 均可切换，暂停冻结计时和视觉，结束清理定时器/class；缺少控制节点时仍自动播放。
 - 验证：`tests/montage-controls.test.js` 通过；静音无头 smoke 暂停 900ms 状态不变，继续后两条主线均进入 `in_proposal`。
 
-## 未关闭问题与后续推进
-
-### UX-005 [P1] 触屏小游戏仍缺少等价输入
+### UX-005 [P1] 触屏小游戏缺少等价输入
 
 - 文件/位置：`js/minigame.js` 输入绑定段、`index.html:72-87`
 - 可复现步骤：在触屏设备进入小游戏，尝试仅用触控完成移动、发射和反向。
-- 实际结果：主要提示仍是 WASD、方向键、鼠标和 E；没有虚拟摇杆/触控发射层。
-- 影响：移动端或触屏投屏只能依赖跳过，小游戏内容失去可玩性。
-- 建议修复：先写 pointer/touch 失败测试，增加可隐藏的虚拟摇杆和两个大尺寸操作区，保留键盘/鼠标路径；所有操作映射到同一游戏命令接口。
-- 验证方式：真实触屏 Playwright/设备模拟 + 2D/skip 降级 smoke，确认不改变主线回调。
+- 实际结果：触屏设备可见虚拟摇杆、紫球/黄球发射按钮和反向按钮；桌面端保持隐藏，键鼠和跳过路径不变。
+- 影响：移动端或触屏投屏无需依赖跳过即可完成小游戏核心操作。
+- 修复：以 Pointer Events 写入共享 `touchInput` 状态；Three.js 与 2D 更新循环通过 `_readMoveVector()` / `_readAimVector()` 消费同一输入，反向动作按下边沿触发；指针取消、能力缺失和重复绑定均安全处理。
+- 验证：`tests/minigame-touch-controls.test.js` 与 `tests/smoke-touch-minigame.py` 通过，`npm test` 35/35、`npm run check` 通过；真实 iOS/Android 实机仍建议在发布前抽验。
+
+## 未关闭问题与后续推进
 
 ### CONTENT-006 [P1] 角色 JPG 带矩形背景/水印，个人素材授权未留证
 
@@ -83,4 +84,4 @@
 
 ## 发布建议
 
-本阶段代码可用于安静的现场体验预演；正式公开发布前先完成素材授权/脱敏和触屏小游戏方案。任何新增媒体、输入方式或蒙太奇控制都必须遵守 `docs/review-rules.md` 的 Red → Green → Refactor 与无网络发布门禁。
+本阶段代码可用于安静的现场体验预演；正式公开发布前先完成素材授权/脱敏、真实触屏实机抽验和低端设备帧率验收。任何新增媒体、输入方式或蒙太奇控制都必须遵守 `docs/review-rules.md` 的 Red → Green → Refactor 与无网络发布门禁。
