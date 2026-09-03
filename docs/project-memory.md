@@ -65,6 +65,7 @@ playing --script end--> ended
 - 2026-09-02 Playwright Chromium 静音无头回归：`tests/smoke-relationship-ux.py` 在 `--mute-audio --disable-audio-output` 下验证 `gaming`（跳过小游戏）与 `first_date` 两条路线。开始页静音按钮不会推进剧情，并与 HUD 状态同步；蒙太奇暂停后 900ms 状态和计时均不变，继续后两条路线均进入 `in_proposal`。无页面异常、失败请求或外链请求；仅保留已知 Three.js classic 弃用 warning 与 headless WebGL `ReadPixels` 性能 warning。
 - 2026-09-02 Playwright Chromium 触屏无头回归：`tests/smoke-touch-minigame.py` 在 `has_touch=True`、强制 2D 模式下验证虚拟摇杆 pointerdown/move/cancel、紫球/黄球按下释放、反向按钮和跳过；桌面上下文确认触屏控件默认隐藏。无页面异常或失败请求，触屏与桌面路径均能回到主线。
 - 2026-09-02 `tests/minigame-physics.test.js` 验证 `dt` 限制、60/30 FPS 积分一致、3D 玩家移动一致、平方距离碰撞与特效队列上限；`npm test` 达到 40/40。3D 更新复用循环时间戳，粒子/拖尾超过预算时回收最旧对象。
+- 2026-09-03 GitHub Pages 正式发布首次运行 `33708973216` 成功，验证与部署作业均通过；`main` 与功能分支共同指向发布提交 `6b5bc7198a5f96cd75a01e63bf6af9d1ae75ee33`。线上无头 Chromium smoke 访问 `https://qzsama.github.io/eternal_project/` 返回 200，开始与静音按钮可见，`Engine`、`Minigame` 和本地 `THREE` 正常加载；13 个请求全部同源，无资源失败、HTTP 错误、外链请求或页面异常。GitHub 对部分官方 Actions 输出 Node 20 兼容运行弃用警告，但已自动使用 Node 24，当前不阻断发布，待官方 Action 主版本更新后复查。
 
 ## 决策记录摘要
 
