@@ -8,10 +8,12 @@
 |---|---|
 | 仓库 | `https://github.com/QZSAMA/eternal_project.git` |
 | 审查分支 | `trae/agent-1maClB` |
-| 基线提交 | `781f1da801db29fb6d8718a26c4a98ceb0ac4ba2` |
-| 运行方式 | 静态文件；发布前用 `python -m http.server 4173` 预览并做断网 smoke；`file://` 仅作便利入口 |
+| 生产分支 | `main` |
+| 生产预览 | `https://qzsama.github.io/eternal_project/` |
+| 基线提交 | 发布提交以 `main` 与 GitHub Pages 部署记录为准 |
+| 运行方式 | 静态文件；发布前用 `python -m http.server 4173` 预览并做断网 smoke；`file://` 仅作便利入口；`main` 通过 Actions 发布到 GitHub Pages |
 | 运行时依赖 | 原生 JS/Web Audio/Canvas + 本地 `vendor/three-r160.min.js`；无运行时网络依赖 |
-| 测试现状 | Node 内置测试 40/40 通过，`npm run check` 通过；两条浏览器主线与触屏小游戏 smoke 已通过 |
+| 测试现状 | Node 内置测试 42/42 通过，`npm run check` 通过；两条浏览器主线与触屏小游戏 smoke 已通过；Pages 发布契约已覆盖 |
 | 资产现状 | 21 个图片文件，约 8.14 MB；BGM 默认显式空值，静默运行且不发起音频请求 |
 | 主要风险 | 角色 JPG 带背景/水印且授权待确认；Three.js classic build 有弃用警告；低端设备仍需实机帧率验收 |
 
@@ -77,6 +79,7 @@ playing --script end--> ended
 | 2026-09-02 | 第一阶段关系体验增加开始前静音与可暂停照片蒙太奇；求婚拒绝改为稳定反馈，小游戏结果按事实传递 | 现场演示中误触接受、跳过后虚假成功文案和不可控长动画会削弱信任；控制逻辑集中在 Engine 并保持离线 | 增加蒙太奇重播/进度条、触屏小游戏输入、或替换音频资产时重新审查生命周期与焦点 |
 | 2026-09-02 | 触屏小游戏采用 Pointer Events + 虚拟摇杆/三按钮，并由 Three.js 与 2D 共用 `touchInput`；控件按触屏能力显示，绑定重复时先清理，缺失能力安全回退 | 让触屏设备可完成移动、瞄准、发射和反向，同时保留键鼠与 skip；统一状态避免两套规则漂移，幂等解绑防止重复点击 | 迁移输入设备、调整控件布局/手势、升级 Three.js 或改变小游戏规则时重新审查 |
 | 2026-09-02 | 3D 小游戏按受限 `dt` 推进，并以平方距离与粒子/拖尾上限降低热路径开销 | 消除低帧率下移动/寿命漂移，减少碰撞临时对象和特效无限增长；保持 60 FPS 手感与现有规则 | 改变速度/生命周期、引入固定时间步或对象池、迁移 Three.js ES Module 时重新基准测试 |
+| 2026-09-03 | `main` 作为唯一生产源，通过 GitHub Pages 官方 Actions 发布 | 保持代码历史与线上版本一致，先过 Node 测试和语法门禁再上传静态文件；失败时保留上一成功版本 | 修改工作流权限、Pages 构建类型、发布目录或仓库可见性时重新验收 |
 
 ## 下次审查触发器
 

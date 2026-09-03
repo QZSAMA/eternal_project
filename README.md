@@ -14,6 +14,14 @@
 
 > 投屏：HDMI 连电视，浏览器全屏，自动等比缩放到 1920×1080。
 
+## GitHub Pages 正式预览
+
+正式版本由 `main` 分支发布到 GitHub Pages：
+
+<https://qzsama.github.io/eternal_project/>
+
+只有通过 `npm test` 和 `npm run check` 的 `main` 推送才会触发部署；也可以在仓库的 Actions 页面手动运行 `Deploy GitHub Pages`。Pages 只负责托管静态文件，游戏运行时仍保持完全同源、离线优先，不新增 CDN、在线字体或 API 依赖。
+
 ---
 
 ## 文件结构
@@ -158,5 +166,9 @@ A: 点击"让我想想…"会保留求婚画面并显示温和提示，不会移
 - Web Audio API 合成音效（无音频文件也能出声）
 - `npm test` 运行配置与降级模式回归测试，`npm run check` 运行语法门禁
 - 不使用任何暴雪官方版权素材，守望风格仅为视觉语言提炼
+
+### 发布维护
+
+发布前请确认照片、角色图、姓名和台词已获得公开部署授权，并按 `docs/review-rules.md` 完成无网络 smoke。部署失败时 GitHub Pages 会保留上一成功版本；修复后重新推送 `main` 即可重试。
 
 祝求婚顺利 ♥
