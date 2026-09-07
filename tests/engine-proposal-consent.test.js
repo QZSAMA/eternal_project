@@ -85,3 +85,34 @@ test('thinking response stays in place and shows a reassuring message', () => {
   assert.equal(btnReject.style.transform, initialTransform);
   assert.match(engine.dom.rejectTip.textContent, /慢慢/);
 });
+
+test('ending restart requires explicit confirmation and cancel preserves the ending', () => {
+  const { engine } = loadEngine();
+  const endingRestart = new FakeEventTarget();
+  const endingConfirm = new FakeEventTarget();
+  const endingConfirmYes = new FakeEventTarget();
+  const endingConfirmNo = new FakeEventTarget();
+  endingRestart.classList = new FakeClassList();
+  endingConfirm.classList = new FakeClassList();
+  endingConfirmYes.classList = new FakeClassList();
+  endingConfirmNo.classList = new FakeClassList();
+  engine.dom.layerEnding = { classList: new FakeClassList() };
+  engine.dom.endingRestart = endingRestart;
+  engine.dom.endingConfirm = endingConfirm;
+  engine.dom.endingConfirmYes = endingConfirmYes;
+  engine.dom.endingConfirmNo = endingConfirmNo;
+  engine.state = 'ended';
+  let reloads = 0;
+  engine._reload = () => { reloads += 1; };
+  engine._bindEndingControls();
+
+  endingRestart.emit('click');
+  assert.equal(endingConfirm.classList.contains('is-show'), true);
+  endingConfirmNo.emit('click');
+  assert.equal(engine.state, 'ended');
+  assert.equal(endingConfirm.classList.contains('is-show'), false);
+  assert.equal(reloads, 0);
+  endingRestart.emit('click');
+  endingConfirmYes.emit('click');
+  assert.equal(reloads, 1);
+});

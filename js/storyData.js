@@ -1,9 +1,9 @@
 /* ============================================
    ★ 用户主要配置文件
-   v2 剧情：小红书相识 / 紫球没奶到 / 名字从 ID 到真名
+   v3 剧情：小红书相识 / 紫球没奶到 / 名字从 ID 到真名
    两位主角：
      - 男：赵启志（ID: QzSama）主玩莫伊拉
-     - 女：朱盈畅（ID: 可乐就是好喝）主玩小美
+     - 女：朱盈畅（ID: 可乐就是好喝）主玩雾子
    meta.heroName/heroineName 默认是 ID；
    后期台词在 say 指令里用 name 字段覆盖为真名。
    ============================================ */
@@ -78,12 +78,12 @@ const CONFIG = {
   // 小游戏平衡数值：逆转的奶
   minigame: {
     duration: 90,           // 给玩家摸索机制的时间
-    winHealCount: 1,        // 奶到小美 1 次即通关
+    winHealCount: 1,        // 奶到雾子 1 次即通关
     playerHP: 100,
     playerSpeed: 4,
-    meiHP: 100,
-    meiR: 14,
-    meiDistance: 80,        // 小美固定在玩家身后 80 像素
+    kirikoHP: 100,
+    kirikoR: 14,
+    kirikoDistance: 80,     // 雾子固定在玩家身后 80 像素
     orbSpeed: 7,
     orbLife: 120,
     orbR: 8,
@@ -104,11 +104,11 @@ const CONFIG = {
       { scene: { bg: "ow_menu", effect: "fade" } },
       { bgm: { track: "opening", fade: 1500 } },
       { say: { who: "narration", text: "故事的开始，不是在游戏里，而是在小红书的一篇笔记上。" } },
-      { say: { who: "narration", text: "「缺队友，快乐组局，不骂人」，笔记里这样写着。" } },
-      { say: { who: "narration", text: "他刷到的时候犹豫了一下，还是点了关注，发了私信：「我也缺队友，加个好友？」" } },
-      { say: { who: "narration", text: "对面很快回了一个「好呀」。" } },
+      { say: { who: "narration", text: "「大龄游戏宅, 喜欢玩OW」，笔记里这样写着。" } },
+      { say: { who: "narration", text: "他刷到的时候犹豫了一下，在下面留言：「戳戳,🙋‍♀️」。" } },
+      { say: { who: "narration", text: "对面很快回了一个「好呀」，还顺手发来了组队邀请。" } },
       { say: { who: "narration", text: "就这样，「QzSama」和「可乐就是好喝」，成了好友列表里挨在一起的两个 ID。" } },
-      { say: { who: "narration", text: "他主玩莫伊拉，紫球丢得满天飞；她主玩小美，冰墙立得理直气壮。" } },
+      { say: { who: "narration", text: "他主玩莫伊拉，紫球丢得满天飞；她主玩雾子，苦无和治疗御札切得飞快。" } },
       { jump: { label: "group_night" } },
     ],
 
@@ -125,8 +125,8 @@ const CONFIG = {
       { say: { who: "hero", expr: "serious", text: "啊？你刚才残血了？怎么不早说！" } },
       { say: { who: "heroine", expr: "laugh", text: "看你丢紫球丢得那么开心，没忍心打断你。" } },
       { say: { who: "narration", text: "他总是这样，紫球一丢就忘乎所以，回头时才发现她早就残血了。" } },
-      { say: { who: "narration", text: "而她从不指责，只是悄悄找个血包，又默默跟回他身后。" } },
-      { say: { who: "narration", text: "嘴上不说，可她每一局都还是挡在他前面，替他立冰墙、替他扛刀。" } },
+      { say: { who: "narration", text: "而她从不指责，只是悄悄开出瞬移铃，又默默跟回他身后。" } },
+      { say: { who: "narration", text: "嘴上不说，可她每一局都还是挡在他前面，用苦无牵制敌人、用铃保护队友。" } },
       { say: { who: "hero", expr: "serious", text: "……其实，除了组局，我也想单独和你说说话。" } },
       { say: { who: "heroine", expr: "shy", text: "嗯？那你想说什么？" } },
       { jump: { label: "branch" } },
@@ -144,7 +144,7 @@ const CONFIG = {
     gaming: [
       { scene: { bg: "ow_route66", effect: "fade" } },
       { bgm: { track: "game", fade: 1000 } },
-      { say: { who: "heroine", expr: "normal", text: "这局你莫伊拉好好奶我啊，我小美要冲了。" } },
+      { say: { who: "heroine", expr: "normal", text: "这局你莫伊拉看准了奶我啊，我雾子要先手进场。" } },
       { say: { who: "hero", expr: "smile", text: "放心，这次我紫球和黄球都给你安排上！" } },
       { call: { minigame: "default" } },
       { say: { who: "heroine", expr: "laugh", text: "哎，和你一起组队就是最开心的事。" } },

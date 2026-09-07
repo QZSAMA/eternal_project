@@ -1,12 +1,7 @@
 /* ============================================
    逆转的奶 · Three.js 主渲染 + Canvas 2D / skip 降级
-   机制不变：
-     - 玩家=莫伊拉，第一/第三人称俯视
-     - 小美永远在莫伊拉身后（朝向反方向）
-     - 左键紫球(打敌人) / 右键黄球(奶)
-     - 黄球直直朝前飞，打不到身后的她
-     - 按 E 让球反方向飞回 → 奶到小美 → 通关揭示真名
-   视觉：3D 场景，发光球体材质，粒子拖尾
+   机制：E 进入选球或让在途球回头；A/D 选择黄/紫球；左键发射
+   视觉：原创第一人称 3D 训练场、发光球体、边界反弹与粒子拖尾
    依赖：全局 THREE（由 index.html 从本地 vendor 加载）；WebGL 不可用时不要求 THREE
    ============================================ */
 
@@ -18,7 +13,7 @@ const Minigame = {
   renderer: null,
   player: null,        // 玩家 mesh
   playerGroup: null,   // 玩家朝向组（球+瞄准锥）
-  mei: null,           // 小美 mesh
+  kiriko: null,           // 雾子 mesh
   enemies: [],
   orbs: [],
   particles: [],
@@ -27,7 +22,10 @@ const Minigame = {
   state: null,
   keys: {},
   mouse: { x: 0, y: 0, nx: 0, ny: 0, leftDown: false, rightDown: false },
-  touchInput: { pointerId: null, moveX: 0, moveY: 0, leftDown: false, rightDown: false, reverseHeld: false, supported: false },
+  touchInput: { pointerId: null, moveX: 0, moveY: 0, fireDown: false, reverseHeld: false, supported: false },
+  selectedOrbType: "yellow",
+  orbSelectionMode: false,
+  arenaHalfSize: 38,
   startTime: 0,
   lastFrame: 0,
   lastSpawn: 0,
@@ -99,17 +97,20 @@ const Minigame = {
     this.wrongShotCount = 0;
     this.hintShown = false;
     this.keys = {};
+    this.mouse.leftDown = false;
+    this.mouse.rightDown = false;
     this.playerVelocity.x = 0;
     this.playerVelocity.y = 0;
     this.playerVelocity.z = 0;
     this._resetTouchInput();
+    this.resetSelection();
     this.ended = false;
     this.endingPhase = 0;
     this.fallbackState = null;
     const hintEl = document.getElementById("mgHint");
     if (hintEl) {
       hintEl.style.display = "block";
-      hintEl.textContent = "左键 紫球(打敌人) · 右键 黄球(奶) · 按 E 让球反方向飞回 · 触屏使用摇杆和按钮";
+      hintEl.textContent = "按 E 选球 · A/D 切换 · 左键发射 · 球飞出后再按 E 让球回头";
     }
     const r = document.getElementById("mgResult");
     if (r) r.classList.remove("is-show");
@@ -119,8 +120,7 @@ const Minigame = {
     this.touchInput.pointerId = null;
     this.touchInput.moveX = 0;
     this.touchInput.moveY = 0;
-    this.touchInput.leftDown = false;
-    this.touchInput.rightDown = false;
+    this.touchInput.fireDown = false;
     this.touchInput.reverseHeld = false;
     this.touchInput.supported = false;
   },
@@ -135,11 +135,79 @@ const Minigame = {
   },
 
   _setTouchAction(type, pressed) {
-    if (type === "purple") this.touchInput.leftDown = pressed;
-    if (type === "yellow") this.touchInput.rightDown = pressed;
+    if (type === "purple" || type === "yellow") {
+      if (pressed) {
+        this._selectOrbType(type);
+        this._fireSelectedOrb();
+      }
+      this.touchInput.fireDown = false;
+    }
     if (type === "reverse") {
-      if (pressed && !this.touchInput.reverseHeld) this._reverseOrbs();
+      if (pressed && !this.touchInput.reverseHeld) this._handleOrbAction();
       this.touchInput.reverseHeld = pressed;
+    }
+    if (type === "fire") this.touchInput.fireDown = pressed;
+  },
+
+  resetSelection() {
+    this.selectedOrbType = "yellow";
+    this.orbSelectionMode = false;
+    this._syncOrbHud();
+  },
+
+  _selectOrbType(type) {
+    if (type !== "yellow" && type !== "purple") return false;
+    this.selectedOrbType = type;
+    this.orbSelectionMode = true;
+    this._syncOrbHud();
+    GameAudio.sfx("select");
+    return true;
+  },
+
+  _cycleOrbType(direction) {
+    const order = ["yellow", "purple"];
+    const current = Math.max(0, order.indexOf(this.selectedOrbType));
+    const next = (current + (direction < 0 ? -1 : 1) + order.length) % order.length;
+    return this._selectOrbType(order[next]);
+  },
+
+  _activeOrbCollection() {
+    if (this.mode === "2d") return (this.fallbackState && this.fallbackState.orbs) || [];
+    return this.orbs || [];
+  },
+
+  _handleOrbAction() {
+    if (this._activeOrbCollection().length > 0) {
+      const reversed = this._reverseOrbs();
+      if (reversed) this.orbSelectionMode = false;
+      this._syncOrbHud(reversed ? "球体已回头" : "球体已经回头");
+      return reversed ? "reversed" : "active";
+    }
+    this.orbSelectionMode = true;
+    this._syncOrbHud("选择黄球或紫球");
+    return "select";
+  },
+
+  _fireSelectedOrb() {
+    if (!this.orbSelectionMode || this._activeOrbCollection().length > 0) return false;
+    const type = this.selectedOrbType === "purple" ? "purple" : "yellow";
+    if (this.mode === "2d") this._fireOrb2D(type);
+    else if (this.scene && this.player) this._fireOrb(type);
+    else return false;
+    this.orbSelectionMode = false;
+    this._syncOrbHud(`${type === "yellow" ? "黄球" : "紫球"}已发射 · 再按 E 让球回头`);
+    return true;
+  },
+
+  _syncOrbHud(message) {
+    const yellow = document.getElementById("mgOrbYellow");
+    const purple = document.getElementById("mgOrbPurple");
+    const status = document.getElementById("mgOrbStatus");
+    if (yellow && yellow.classList) yellow.classList.toggle("is-selected", this.selectedOrbType === "yellow");
+    if (purple && purple.classList) purple.classList.toggle("is-selected", this.selectedOrbType === "purple");
+    if (status) {
+      const label = this.selectedOrbType === "yellow" ? "黄球 · 治疗" : "紫球 · 伤害";
+      status.textContent = message || (this.orbSelectionMode ? `已选择 ${label} · 左键发射` : `${label} · 按 E 选球`);
     }
   },
 
@@ -153,13 +221,13 @@ const Minigame = {
     }
     this.fallbackState = {
       player: { x: 640, y: 360, facingX: 0, facingY: -1 },
-      mei: { x: 640, y: 440, hp: this.cfg.meiHP || 100 },
+      kiriko: { x: 640, y: 440, hp: this.cfg.kirikoHP || 100 },
       orbs: [],
       enemies: [],
       lastSpawn: 0,
     };
     const hintEl = document.getElementById("mgHint");
-    if (hintEl) hintEl.textContent = "2D 兼容模式：WASD 移动 · 点击发射 · 按 E 让球反向飞回小美 · 触屏使用摇杆和按钮 · 也可跳过";
+    if (hintEl) hintEl.textContent = "2D 兼容模式：E 选球 · A/D 切换 · 左键发射 · 再按 E 回头 · 也可跳过";
     const canvasEl = document.getElementById("minigameCanvas");
     if (canvasEl) canvasEl.setAttribute("aria-label", "2D 兼容模式：使用 WASD 移动，点击发射球，按 E 反向球体；触屏使用摇杆和按钮");
   },
@@ -180,8 +248,8 @@ const Minigame = {
     this.scene.fog = new THREE.FogExp2(0x0a0f19, 0.012);
 
     this.camera = new THREE.PerspectiveCamera(55, 1280 / 720, 0.1, 500);
-    this.camera.position.set(0, 18, 22);
-    this.camera.lookAt(0, 1, 0);
+    this.camera.position.set(0, 4.5, 8.5);
+    this.camera.lookAt(0, 2.4, -12);
 
     // 光照
     this.scene.add(new THREE.AmbientLight(0x4a5a7a, 0.5));
@@ -195,7 +263,7 @@ const Minigame = {
     p2.position.set(10, 8, 5);
     this.scene.add(p2);
 
-    // 地面网格（守望先锋风格）
+    // 地面网格：抽象科幻训练场，不复用任何官方地图素材。
     const grid = new THREE.GridHelper(200, 80, 0x4FC3F7, 0x1a2438);
     grid.position.y = 0;
     this.scene.add(grid);
@@ -207,6 +275,7 @@ const Minigame = {
     floor.rotation.x = -Math.PI / 2;
     floor.position.y = -0.01;
     this.scene.add(floor);
+    this._buildTrainingArena();
 
     // 玩家（莫伊拉）= 紫色发光胶囊体
     this.playerGroup = new THREE.Group();
@@ -246,35 +315,68 @@ const Minigame = {
     this.player.facing = 0;  // 弧度
     this.scene.add(this.player);
 
-    // 小美 = 青蓝色球体（永远在玩家身后）
-    const meiGroup = new THREE.Group();
-    const meiBody = new THREE.Mesh(
+    // 雾子 = 青蓝色球体（永远在玩家身后）
+    const kirikoGroup = new THREE.Group();
+    const kirikoBody = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.6, 1.0, 8, 16),
       new THREE.MeshStandardMaterial({ color: 0x2a7fb5, emissive: 0x4FC3F7, emissiveIntensity: 0.6, metalness: 0.3, roughness: 0.4 })
     );
-    meiBody.position.y = 1.2;
-    meiGroup.add(meiBody);
-    const meiHead = new THREE.Mesh(
+    kirikoBody.position.y = 1.2;
+    kirikoGroup.add(kirikoBody);
+    const kirikoHead = new THREE.Mesh(
       new THREE.SphereGeometry(0.45, 16, 16),
       new THREE.MeshStandardMaterial({ color: 0xd7ecff, emissive: 0x4FC3F7, emissiveIntensity: 0.2 })
     );
-    meiHead.position.y = 2.2;
-    meiGroup.add(meiHead);
-    // 小美光环
-    const meiHalo = new THREE.Mesh(
+    kirikoHead.position.y = 2.2;
+    kirikoGroup.add(kirikoHead);
+    // 雾子光环
+    const kirikoHalo = new THREE.Mesh(
       new THREE.RingGeometry(0.9, 1.15, 32),
       new THREE.MeshBasicMaterial({ color: 0x4FC3F7, side: THREE.DoubleSide, transparent: true, opacity: 0.5 })
     );
-    meiHalo.rotation.x = -Math.PI / 2;
-    meiHalo.position.y = 0.05;
-    meiGroup.add(meiHalo);
-    this.meiHalo = meiHalo;
-    this.mei = meiGroup;
-    this.mei.hp = this.cfg.meiHP;
-    this.scene.add(this.mei);
+    kirikoHalo.rotation.x = -Math.PI / 2;
+    kirikoHalo.position.y = 0.05;
+    kirikoGroup.add(kirikoHalo);
+    this.kirikoHalo = kirikoHalo;
+    this.kiriko = kirikoGroup;
+    this.kiriko.hp = this.cfg.kirikoHP;
+    this.scene.add(this.kiriko);
 
     // 加载球纹理
     this._loadOrbTextures();
+  },
+
+  _buildTrainingArena() {
+    if (!this.scene) return;
+    const wallMaterial = new THREE.MeshStandardMaterial({
+      color: 0x16263d, emissive: 0x123c5d, emissiveIntensity: 0.55,
+      metalness: 0.65, roughness: 0.35,
+    });
+    const trimMaterial = new THREE.MeshBasicMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.72 });
+    const half = this.arenaHalfSize;
+    const addBox = (x, y, z, sx, sy, sz, material = wallMaterial) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), material);
+      mesh.position.set(x, y, z);
+      this.scene.add(mesh);
+      return mesh;
+    };
+    // Four low walls make the playable space readable without copying a game map.
+    addBox(0, 2, -half - 1, half * 2 + 4, 4, 2);
+    addBox(0, 2, half + 1, half * 2 + 4, 4, 2);
+    addBox(-half - 1, 2, 0, 2, 4, half * 2);
+    addBox(half + 1, 2, 0, 2, 4, half * 2);
+    // Three procedural cover blocks create depth and alternate firing lanes.
+    addBox(-14, 1.5, -7, 7, 3, 7);
+    addBox(12, 2.5, 8, 9, 5, 5);
+    addBox(4, 1.25, -22, 5, 2.5, 4);
+    [-half, half].forEach((x) => addBox(x, 0.12, 0, 0.18, 0.24, half * 2, trimMaterial));
+    [-half, half].forEach((z) => addBox(0, 0.12, z, half * 2, 0.24, 0.18, trimMaterial));
+    const beacon = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.35, 0.55, 5, 12),
+      new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x4fc3f7, emissiveIntensity: 1.4 })
+    );
+    beacon.position.set(0, 2.5, -half + 4);
+    this.scene.add(beacon);
   },
 
   _loadOrbTextures() {
@@ -398,10 +500,7 @@ const Minigame = {
       }
     };
     this.bound.touchJoyEnd = (event) => this._releaseTouchJoystick(event.pointerId);
-    this.bound.touchActionEnd = () => {
-      this._setTouchAction("purple", false);
-      this._setTouchAction("yellow", false);
-    };
+    this.bound.touchActionEnd = () => this._setTouchAction("fire", false);
     this.bound.touchPurpleDown = (event) => { event.preventDefault(); this._setTouchAction("purple", true); };
     this.bound.touchPurpleUp = () => this._setTouchAction("purple", false);
     this.bound.touchYellowDown = (event) => { event.preventDefault(); this._setTouchAction("yellow", true); };
@@ -423,24 +522,26 @@ const Minigame = {
       this._setTouchAction("reverse", true);
       this._setTouchAction("reverse", false);
     };
+    this.bound.touchSelectYellow = (event) => {
+      event.preventDefault();
+      this._selectOrbType("yellow");
+      this._fireSelectedOrb();
+    };
+    this.bound.touchSelectPurple = (event) => {
+      event.preventDefault();
+      this._selectOrbType("purple");
+      this._fireSelectedOrb();
+    };
 
     bind(joystick, "pointerdown", this.bound.touchJoyDown);
     bind(joystick, "pointermove", this.bound.touchJoyMove);
     bind(joystick, "pointerup", this.bound.touchJoyEnd);
     bind(joystick, "pointercancel", this.bound.touchJoyEnd);
-    const purple = document.getElementById("mgTouchPurple");
-    const yellow = document.getElementById("mgTouchYellow");
+    const selectPurple = document.getElementById("mgTouchSelectPurple");
+    const selectYellow = document.getElementById("mgTouchSelectYellow");
     const reverse = document.getElementById("mgTouchReverse");
-    bind(purple, "pointerdown", this.bound.touchPurpleDown);
-    bind(purple, "pointerup", this.bound.touchPurpleUp);
-    bind(purple, "pointercancel", this.bound.touchPurpleUp);
-    bind(purple, "keydown", this.bound.touchPurpleKeyDown);
-    bind(purple, "keyup", this.bound.touchPurpleKeyUp);
-    bind(yellow, "pointerdown", this.bound.touchYellowDown);
-    bind(yellow, "pointerup", this.bound.touchYellowUp);
-    bind(yellow, "pointercancel", this.bound.touchYellowUp);
-    bind(yellow, "keydown", this.bound.touchYellowKeyDown);
-    bind(yellow, "keyup", this.bound.touchYellowKeyUp);
+    bind(selectPurple, "pointerdown", this.bound.touchSelectPurple);
+    bind(selectYellow, "pointerdown", this.bound.touchSelectYellow);
     bind(reverse, "click", this.bound.touchReverse);
     bind(window, "pointerup", this.bound.touchActionEnd);
     bind(window, "pointercancel", this.bound.touchActionEnd);
@@ -504,11 +605,21 @@ const Minigame = {
 
   _bindInputs() {
     this.bound.keyDown = (e) => {
+      if ((e.code === "KeyA" || e.code === "ArrowLeft") && this.orbSelectionMode) {
+        e.preventDefault();
+        this._cycleOrbType(-1);
+        return;
+      }
+      if ((e.code === "KeyD" || e.code === "ArrowRight") && this.orbSelectionMode) {
+        e.preventDefault();
+        this._cycleOrbType(1);
+        return;
+      }
       this.keys[e.code] = true;
       if (e.code === "Escape") this._skip();
       if (e.code === "KeyE" && !this._eHeld) {
         this._eHeld = true;
-        this._reverseOrbs();
+        this._handleOrbAction();
       }
     };
     this.bound.keyUp = (e) => {
@@ -538,7 +649,10 @@ const Minigame = {
     this.bound.mouseDown = (e) => {
       e.preventDefault();
       if (e.button === 0) this.mouse.leftDown = true;
-      if (e.button === 2) this.mouse.rightDown = true;
+      if (e.button === 2) {
+        this._selectOrbType("purple");
+        this.mouse.rightDown = true;
+      }
     };
     this.bound.mouseUp = (e) => {
       if (e.button === 0) this.mouse.leftDown = false;
@@ -678,31 +792,22 @@ const Minigame = {
     this.player.facing = facing;
     this.player.rotation.y = facing;
 
-    // 小美：永远在玩家"身后"（朝向反方向）距离 meiDistance/10
-    const dist = (this.cfg.meiDistance || 80) / 10;  // 转换到 3D 单位
+    // 雾子：永远在玩家"身后"（朝向反方向）距离 kirikoDistance/10
+    const dist = (this.cfg.kirikoDistance || 80) / 10;  // 转换到 3D 单位
     const bx = this.player.position.x - Math.sin(facing) * dist;
     const bz = this.player.position.z - Math.cos(facing) * dist;
-    this.mei.position.x = bx;
-    this.mei.position.z = bz;
-    this.mei.rotation.y = facing + Math.PI;  // 看向玩家方向
+    this.kiriko.position.x = bx;
+    this.kiriko.position.z = bz;
+    this.kiriko.rotation.y = facing + Math.PI;  // 看向玩家方向
     // 光环旋转
     if (this.playerHalo) this.playerHalo.rotation.z += 0.02 * frameScale;
-    if (this.meiHalo) this.meiHalo.rotation.z -= 0.015 * frameScale;
+    if (this.kirikoHalo) this.kirikoHalo.rotation.z -= 0.015 * frameScale;
 
     // 射击
     const nowShot = now;
-    if ((this.mouse.leftDown || this.touchInput.leftDown) && nowShot - this.lastShot > this.cfg.fireRate) {
+    if (this.mouse.leftDown && nowShot - this.lastShot > this.cfg.fireRate) {
       this.lastShot = nowShot;
-      this._fireOrb("purple");
-    }
-    if ((this.mouse.rightDown || this.touchInput.rightDown) && nowShot - this.lastShot > this.cfg.fireRate) {
-      this.lastShot = nowShot;
-      this._fireOrb("yellow");
-      this.wrongShotCount++;
-      if (this.wrongShotCount >= 2 && !this.hintShown) {
-        this.hintShown = true;
-        this._floatText(this.mei.position.x, 3, this.mei.position.z, "（轻声）我一直在你身后……球，可以反方向回来的。", "#9AC");
-      }
+      this._fireSelectedOrb();
     }
 
     // 球更新
@@ -711,6 +816,7 @@ const Minigame = {
       o.mesh.position.x += o.vx * frameScale;
       o.mesh.position.y += o.vy * frameScale;
       o.mesh.position.z += o.vz * frameScale;
+      this._reflectOrbAtBounds(o, this.arenaHalfSize);
       o.life -= frameScale;
       // 拖尾
       o.trailAccumulator = (o.trailAccumulator || 0) + frameScale;
@@ -757,10 +863,10 @@ const Minigame = {
         }
         if (hit) { this._removeOrb(i); continue; }
       } else {
-        // 黄球奶小美
-        if (this._distanceSquaredXZ(o.mesh.position, this.mei.position) < 1.5 * 1.5) {
-          this.mei.hp = Math.min(this.cfg.meiHP, this.mei.hp + this.cfg.yellowHeal);
-          this._floatText(this.mei.position.x, 3, this.mei.position.z, "+♥ 这次看到了", "#4FC3F7");
+        // 黄球奶雾子
+        if (this._distanceSquaredXZ(o.mesh.position, this.kiriko.position) < 1.5 * 1.5) {
+          this.kiriko.hp = Math.min(this.cfg.kirikoHP, this.kiriko.hp + this.cfg.yellowHeal);
+          this._floatText(this.kiriko.position.x, 3, this.kiriko.position.z, "+♥ 这次看到了", "#4FC3F7");
           GameAudio.sfx("capture");
           this.healCount++;
           this._removeOrb(i);
@@ -799,25 +905,25 @@ const Minigame = {
       this.enemies.push({ mesh: m, hp: this.cfg.enemyHP, speed: (this.cfg.enemySpeed || 1) * 0.04 });
     }
 
-    // 敌人移动（朝向小美）
+    // 敌人移动（朝向雾子）
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const e = this.enemies[i];
-      const dx = this.mei.position.x - e.mesh.position.x;
-      const dz = this.mei.position.z - e.mesh.position.z;
+      const dx = this.kiriko.position.x - e.mesh.position.x;
+      const dz = this.kiriko.position.z - e.mesh.position.z;
       const len = Math.hypot(dx, dz) || 1;
       e.mesh.position.x += (dx / len) * e.speed * frameScale;
       e.mesh.position.z += (dz / len) * e.speed * frameScale;
       // 旋转动画
       e.mesh.children[0].rotation.y += 0.04 * frameScale;
       e.mesh.children[0].rotation.x += 0.02 * frameScale;
-      // 碰撞小美
-      if (e.mesh.position.distanceTo(this.mei.position) < 1.4) {
-        this.mei.hp = Math.max(1, this.mei.hp - this.cfg.enemyDamage);
-        this._spawnParticles(this.mei.position.x, 1.5, this.mei.position.z, 0xE44040, 6);
+      // 碰撞雾子
+      if (e.mesh.position.distanceTo(this.kiriko.position) < 1.4) {
+        this.kiriko.hp = Math.max(1, this.kiriko.hp - this.cfg.enemyDamage);
+        this._spawnParticles(this.kiriko.position.x, 1.5, this.kiriko.position.z, 0xE44040, 6);
         this.scene.remove(e.mesh);
         this.enemies.splice(i, 1);
-        if (this.mei.hp <= 10) {
-          this._floatText(this.mei.position.x, 3, this.mei.position.z, "（轻声）没事……我自己能撑住。", "#9AC");
+        if (this.kiriko.hp <= 10) {
+          this._floatText(this.kiriko.position.x, 3, this.kiriko.position.z, "（轻声）没事……我自己能撑住。", "#9AC");
         }
       }
     }
@@ -838,14 +944,21 @@ const Minigame = {
       }
     }
 
-    // 相机跟随玩家
-    this.camera.position.x = this.player.position.x;
-    this.camera.position.z = this.player.position.z + 22;
-    this.camera.lookAt(this.player.position.x, 1, this.player.position.z - 5);
+    // 低位跟随镜头：保持第一人称训练场的空间感，同时保留雾子在身后的叙事关系。
+    if (this.camera) {
+      this.camera.position.x = this.player.position.x;
+      this.camera.position.y = this.player.position.y + 4.5;
+      this.camera.position.z = this.player.position.z + 8.5;
+      this.camera.lookAt(
+        this.player.position.x + Math.sin(this.player.facing) * 12,
+        this.player.position.y + 2.4,
+        this.player.position.z - Math.cos(this.player.facing) * 12
+      );
+    }
 
     // HUD
     const hpEl = document.getElementById("mgHpFill");
-    if (hpEl) hpEl.style.width = Math.max(0, this.mei.hp / this.cfg.meiHP * 100) + "%";
+    if (hpEl) hpEl.style.width = Math.max(0, this.kiriko.hp / this.cfg.kirikoHP * 100) + "%";
     const tEl = document.getElementById("mgTimer");
     if (tEl) tEl.textContent = Math.ceil(this.timeLeft);
   },
@@ -879,27 +992,19 @@ const Minigame = {
       state.player.facingX = dx / aimLength;
       state.player.facingY = dy / aimLength;
     }
-    state.mei.x = state.player.x - state.player.facingX * (this.cfg.meiDistance || 80);
-    state.mei.y = state.player.y - state.player.facingY * (this.cfg.meiDistance || 80);
+    state.kiriko.x = state.player.x - state.player.facingX * (this.cfg.kirikoDistance || 80);
+    state.kiriko.y = state.player.y - state.player.facingY * (this.cfg.kirikoDistance || 80);
 
-    if ((this.mouse.leftDown || this.touchInput.leftDown) && now - this.lastShot > (this.cfg.fireRate || 400)) {
+    if (this.mouse.leftDown && now - this.lastShot > (this.cfg.fireRate || 400)) {
       this.lastShot = now;
-      this._fireOrb2D("purple");
-    }
-    if ((this.mouse.rightDown || this.touchInput.rightDown) && now - this.lastShot > (this.cfg.fireRate || 400)) {
-      this.lastShot = now;
-      this._fireOrb2D("yellow");
-      this.wrongShotCount++;
-      if (this.wrongShotCount >= 2 && !this.hintShown) {
-        this.hintShown = true;
-        this._floatText2D("按 E，让黄球反向飞回她身边", "#9AC");
-      }
+      this._fireSelectedOrb();
     }
 
     for (let i = state.orbs.length - 1; i >= 0; i--) {
       const orb = state.orbs[i];
       orb.x += orb.vx * seconds;
       orb.y += orb.vy * seconds;
+      this._reflectOrb2D(orb, 20, 1260, 30, 690);
       orb.life -= seconds * 60;
       if (orb.life <= 0 || orb.x < -30 || orb.x > 1310 || orb.y < -30 || orb.y > 750) {
         state.orbs.splice(i, 1);
@@ -917,8 +1022,8 @@ const Minigame = {
           }
         }
         if (hit) state.orbs.splice(i, 1);
-      } else if (Math.hypot(orb.x - state.mei.x, orb.y - state.mei.y) < 28) {
-        state.mei.hp = Math.min(this.cfg.meiHP || 100, state.mei.hp + (this.cfg.yellowHeal || 40));
+      } else if (Math.hypot(orb.x - state.kiriko.x, orb.y - state.kiriko.y) < 28) {
+        state.kiriko.hp = Math.min(this.cfg.kirikoHP || 100, state.kiriko.hp + (this.cfg.yellowHeal || 40));
         this.healCount++;
         this._floatText2D("+♥ 这次看到了", "#4FC3F7");
         state.orbs.splice(i, 1);
@@ -934,26 +1039,26 @@ const Minigame = {
       const angle = Math.random() * Math.PI * 2;
       const radius = 260 + Math.random() * 100;
       state.enemies.push({
-        x: Math.max(20, Math.min(1260, state.mei.x + Math.cos(angle) * radius)),
-        y: Math.max(20, Math.min(700, state.mei.y + Math.sin(angle) * radius)),
+        x: Math.max(20, Math.min(1260, state.kiriko.x + Math.cos(angle) * radius)),
+        y: Math.max(20, Math.min(700, state.kiriko.y + Math.sin(angle) * radius)),
         hp: this.cfg.enemyHP || 30,
       });
     }
     for (let i = state.enemies.length - 1; i >= 0; i--) {
       const enemy = state.enemies[i];
-      const ex = state.mei.x - enemy.x;
-      const ey = state.mei.y - enemy.y;
+      const ex = state.kiriko.x - enemy.x;
+      const ey = state.kiriko.y - enemy.y;
       const length = Math.hypot(ex, ey) || 1;
       const enemySpeed = (this.cfg.enemySpeed || 1) * 60;
       enemy.x += (ex / length) * enemySpeed * seconds;
       enemy.y += (ey / length) * enemySpeed * seconds;
-      if (Math.hypot(enemy.x - state.mei.x, enemy.y - state.mei.y) < 24) {
-        state.mei.hp = Math.max(1, state.mei.hp - (this.cfg.enemyDamage || 8));
+      if (Math.hypot(enemy.x - state.kiriko.x, enemy.y - state.kiriko.y) < 24) {
+        state.kiriko.hp = Math.max(1, state.kiriko.hp - (this.cfg.enemyDamage || 8));
         state.enemies.splice(i, 1);
       }
     }
     const hpEl = document.getElementById("mgHpFill");
-    if (hpEl) hpEl.style.width = Math.max(0, state.mei.hp / (this.cfg.meiHP || 100) * 100) + "%";
+    if (hpEl) hpEl.style.width = Math.max(0, state.kiriko.hp / (this.cfg.kirikoHP || 100) * 100) + "%";
     const tEl = document.getElementById("mgTimer");
     if (tEl) tEl.textContent = Math.ceil(this.timeLeft);
   },
@@ -1005,6 +1110,27 @@ const Minigame = {
     GameAudio.sfx("gunshot");
   },
 
+  _reflectOrbAtBounds(orb, bound = this.arenaHalfSize) {
+    if (!orb || !orb.mesh || !orb.mesh.position) return false;
+    const position = orb.mesh.position;
+    let reflected = false;
+    if (position.x >= bound && orb.vx > 0) { position.x = bound; orb.vx = -Math.abs(orb.vx); reflected = true; }
+    else if (position.x <= -bound && orb.vx < 0) { position.x = -bound; orb.vx = Math.abs(orb.vx); reflected = true; }
+    if (position.z >= bound && orb.vz > 0) { position.z = bound; orb.vz = -Math.abs(orb.vz); reflected = true; }
+    else if (position.z <= -bound && orb.vz < 0) { position.z = -bound; orb.vz = Math.abs(orb.vz); reflected = true; }
+    return reflected;
+  },
+
+  _reflectOrb2D(orb, minX, maxX, minY, maxY) {
+    if (!orb) return false;
+    let reflected = false;
+    if (orb.x > maxX) { orb.x = maxX; orb.vx = -Math.abs(orb.vx); reflected = true; }
+    else if (orb.x < minX) { orb.x = minX; orb.vx = Math.abs(orb.vx); reflected = true; }
+    if (orb.y > maxY) { orb.y = maxY; orb.vy = -Math.abs(orb.vy); reflected = true; }
+    else if (orb.y < minY) { orb.y = minY; orb.vy = Math.abs(orb.vy); reflected = true; }
+    return reflected;
+  },
+
   _reverseOrbs() {
     let any = false;
     if (this.mode === "2d") {
@@ -1019,7 +1145,7 @@ const Minigame = {
         }
       }
       if (any) GameAudio.sfx("select");
-      return;
+      return any;
     }
     for (const o of this.orbs) {
       if (!o.reversed) {
@@ -1028,11 +1154,14 @@ const Minigame = {
         o.vz = -o.vz;
         any = true;
         // 反向闪光
-        this._spawnParticles(o.mesh.position.x, o.mesh.position.y, o.mesh.position.z,
-          o.type === "purple" ? 0xFF66FF : 0xFFFF66, 8);
+        if (this.scene && this._spawnParticles) {
+          this._spawnParticles(o.mesh.position.x, o.mesh.position.y, o.mesh.position.z,
+            o.type === "purple" ? 0xFF66FF : 0xFFFF66, 8);
+        }
       }
     }
     if (any) GameAudio.sfx("select");
+    return any;
   },
 
   _removeOrb(i) {
@@ -1092,7 +1221,7 @@ const Minigame = {
   },
 
   _revealNames() {
-    // 镜头拉近小美，她从身后"走出来"
+    // 镜头拉近雾子，她从身后"走出来"
     // 用 DOM 层叠加文字（避免 3D 内嵌字体复杂度）
     const wrap = document.getElementById("mgFloats");
     if (!wrap) return;
@@ -1159,12 +1288,12 @@ const Minigame = {
     ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 72, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = "rgba(79,195,247,.35)";
-    ctx.beginPath(); ctx.arc(state.mei.x, state.mei.y, 28, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(state.kiriko.x, state.kiriko.y, 28, 0, Math.PI * 2); ctx.stroke();
 
     ctx.fillStyle = "#9B30FF";
     ctx.beginPath(); ctx.arc(state.player.x, state.player.y, 18, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = "#4FC3F7";
-    ctx.beginPath(); ctx.arc(state.mei.x, state.mei.y, 15, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(state.kiriko.x, state.kiriko.y, 15, 0, Math.PI * 2); ctx.fill();
     ctx.strokeStyle = "#F99E2A";
     ctx.beginPath(); ctx.moveTo(state.player.x, state.player.y); ctx.lineTo(state.player.x + state.player.facingX * 34, state.player.y + state.player.facingY * 34); ctx.stroke();
 

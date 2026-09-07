@@ -71,23 +71,28 @@
         <canvas id="minigameCanvas" width="1280" height="720" role="application" aria-label="逆转的奶小游戏：使用 WASD 移动，鼠标发射球，按 E 反向球体"></canvas>
         <div class="mg-hud">
           <div class="mg-hp-bar"><div class="mg-hp-fill" id="mgHpFill"></div></div>
-          <div class="mg-hp-label">小美血量</div>
+          <div class="mg-hp-label">雾子血量</div>
           <div class="mg-timer" id="mgTimer">90</div>
           <div class="mg-floats" id="mgFloats"></div>
           <div class="mg-result" id="mgResult" role="status" aria-live="polite"></div>
+        </div>
+        <div class="mg-orb-select" id="mgOrbSelect" role="status" aria-live="polite" aria-atomic="true">
+          <span class="mg-orb-option mg-orb-option--yellow" id="mgOrbYellow">黄球 · 治疗</span>
+          <span class="mg-orb-option mg-orb-option--purple" id="mgOrbPurple">紫球 · 伤害</span>
+          <span class="mg-orb-status" id="mgOrbStatus">按 E 选择球体</span>
         </div>
         <div class="mg-touch-controls" id="mgTouchControls" aria-label="触屏操作">
           <div class="mg-joystick touch-control" id="mgJoystick" role="application" aria-label="移动和瞄准">
             <span class="mg-joystick-knob" id="mgJoystickKnob" aria-hidden="true"></span>
           </div>
           <div class="mg-touch-actions">
-            <button class="mg-touch-btn touch-control" id="mgTouchPurple" type="button" aria-label="发射紫球">紫球</button>
-            <button class="mg-touch-btn touch-control" id="mgTouchYellow" type="button" aria-label="发射黄球">黄球</button>
-            <button class="mg-touch-btn touch-control" id="mgTouchReverse" type="button" aria-label="反向球体">反向</button>
+            <button class="mg-touch-btn touch-control" id="mgTouchSelectYellow" type="button" aria-label="选择并发射黄球">黄球</button>
+            <button class="mg-touch-btn touch-control" id="mgTouchSelectPurple" type="button" aria-label="选择并发射紫球">紫球</button>
+            <button class="mg-touch-btn touch-control" id="mgTouchReverse" type="button" aria-label="让已发射球反向">回头</button>
           </div>
         </div>
         <button class="mg-skip" id="mgSkip" type="button" aria-label="跳过小游戏">跳过 ▶</button>
-        <div class="mg-hint" id="mgHint">左键 紫球 · 右键 黄球 · 按 E 让球反方向飞回</div>
+        <div class="mg-hint" id="mgHint">按 E 选球 · A/D 切换 · 左键发射 · 再按 E 让球回头</div>
       </div>
     </div>
 
@@ -129,7 +134,16 @@
         <div class="ending-big" id="endingBig">她说好！</div>
         <div class="ending-sub" id="endingSub">THE ANSWER IS YES</div>
         <div class="ending-meta" id="endingMeta"></div>
-        <div class="ending-restart" id="endingRestart">按任意键重新开始</div>
+        <button class="ending-restart" id="endingRestart" type="button">重新开始</button>
+      </div>
+      <div class="ending-confirm" id="endingConfirm" role="dialog" aria-modal="true" aria-labelledby="endingConfirmTitle" hidden>
+        <div class="ending-confirm-panel">
+          <h2 id="endingConfirmTitle">要重新开始我们的故事吗？</h2>
+          <div class="ending-confirm-actions">
+            <button id="endingConfirmYes" type="button">重新开始</button>
+            <button id="endingConfirmNo" type="button">先留在这里</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -167,11 +181,11 @@
   <script src="vendor/three-r160.min.js"></script>
 
   <!-- 加载顺序：数据 → 音频 → 小游戏 → 引擎 -->
-  <script src="js/storyData.js?v=4"></script>
+  <script src="js/storyData.js?v=5"></script>
   <script src="js/configValidation.js?v=1"></script>
   <script src="js/minigameMode.js?v=1"></script>
   <script src="js/audio.js?v=4"></script>
-  <script src="js/minigame.js?v=4"></script>
-  <script src="js/engine.js?v=4"></script>
+  <script src="js/minigame.js?v=5"></script>
+  <script src="js/engine.js?v=5"></script>
 </body>
 </html>

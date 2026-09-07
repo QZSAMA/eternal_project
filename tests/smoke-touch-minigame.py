@@ -64,17 +64,16 @@ def run_touch_controls(page):
     assert page.evaluate("Minigame.touchInput.pointerId") is None
     assert page.evaluate("Minigame.touchInput.moveX") == 0
 
-    dispatch_pointer(page, "#mgTouchPurple", "pointerdown", 8, center_x, center_y)
-    assert page.evaluate("Minigame.touchInput.leftDown") is True
-    dispatch_pointer(page, "#mgTouchPurple", "pointerup", 8, center_x, center_y)
-    assert page.evaluate("Minigame.touchInput.leftDown") is False
+    dispatch_pointer(page, "#mgTouchSelectPurple", "pointerdown", 8, center_x, center_y)
+    assert page.evaluate("Minigame.selectedOrbType") == "purple"
+    assert page.evaluate("Minigame.fallbackState.orbs.length") == 1
+    page.locator("#mgTouchReverse").click(force=True)
 
-    dispatch_pointer(page, "#mgTouchYellow", "pointerdown", 9, center_x, center_y)
-    assert page.evaluate("Minigame.touchInput.rightDown") is True
-    dispatch_pointer(page, "#mgTouchYellow", "pointerup", 9, center_x, center_y)
-    assert page.evaluate("Minigame.touchInput.rightDown") is False
+    dispatch_pointer(page, "#mgTouchSelectYellow", "pointerdown", 9, center_x, center_y)
+    assert page.evaluate("Minigame.selectedOrbType") == "yellow"
+    assert page.evaluate("Minigame.fallbackState.orbs.length") == 1
 
-    page.evaluate("Minigame.__reverseCalls = 0; Minigame._reverseOrbs = function () { Minigame.__reverseCalls += 1; }; void 0")
+    page.evaluate("Minigame.__reverseCalls = 0; Minigame._handleOrbAction = function () { Minigame.__reverseCalls += 1; }; void 0")
     page.locator("#mgTouchReverse").click(force=True)
     assert page.evaluate("Minigame.__reverseCalls") == 1
     page.locator("#mgSkip").dispatch_event("click")

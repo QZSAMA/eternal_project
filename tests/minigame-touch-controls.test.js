@@ -48,8 +48,8 @@ function loadMinigameWithTouchDom() {
     mgTouchControls: new FakeNode(),
     mgJoystick: new FakeNode({ left: 0, top: 0, width: 100, height: 100 }),
     mgJoystickKnob: new FakeNode(),
-    mgTouchPurple: new FakeNode(),
-    mgTouchYellow: new FakeNode(),
+    mgTouchSelectPurple: new FakeNode(),
+    mgTouchSelectYellow: new FakeNode(),
     mgTouchReverse: new FakeNode(),
   };
   const minigame = loadMinigame({ pointerEvents: true, nodes });
@@ -67,20 +67,21 @@ test('touch vector maps to a dead-zone-normalized movement vector', () => {
   assert.equal(deadZone.y, 0);
 });
 
-test('touch actions press and release the matching fire state', () => {
+test('touch actions select and immediately fire the matching orb', () => {
   const minigame = loadMinigame();
   minigame._setTouchAction('purple', true);
-  assert.equal(minigame.touchInput.leftDown, true);
+  assert.equal(minigame.selectedOrbType, 'purple');
+  assert.equal(minigame.touchInput.fireDown, false);
   minigame._setTouchAction('purple', false);
-  assert.equal(minigame.touchInput.leftDown, false);
+  assert.equal(minigame.touchInput.fireDown, false);
   minigame._setTouchAction('yellow', true);
-  assert.equal(minigame.touchInput.rightDown, true);
+  assert.equal(minigame.selectedOrbType, 'yellow');
 });
 
 test('reverse action is edge-triggered and reset clears stuck controls', () => {
   const minigame = loadMinigame();
   let reverseCount = 0;
-  minigame._reverseOrbs = () => { reverseCount += 1; };
+  minigame._handleOrbAction = () => { reverseCount += 1; };
   minigame._setTouchAction('reverse', true);
   minigame._setTouchAction('reverse', true);
   minigame._setTouchAction('reverse', false);
@@ -89,8 +90,7 @@ test('reverse action is edge-triggered and reset clears stuck controls', () => {
   assert.equal(minigame.touchInput.pointerId, null);
   assert.equal(minigame.touchInput.moveX, 0);
   assert.equal(minigame.touchInput.moveY, 0);
-  assert.equal(minigame.touchInput.leftDown, false);
-  assert.equal(minigame.touchInput.rightDown, false);
+  assert.equal(minigame.touchInput.fireDown, false);
   assert.equal(minigame.touchInput.reverseHeld, false);
   assert.equal(minigame.touchInput.supported, false);
 });
@@ -98,12 +98,12 @@ test('reverse action is edge-triggered and reset clears stuck controls', () => {
 test('touch controls expose semantic nodes and minimum touch size', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const css = fs.readFileSync(path.join(__dirname, '..', 'css', 'style.css'), 'utf8');
-  for (const id of ['mgTouchControls', 'mgJoystick', 'mgTouchPurple', 'mgTouchYellow', 'mgTouchReverse']) {
+  for (const id of ['mgTouchControls', 'mgJoystick', 'mgTouchSelectPurple', 'mgTouchSelectYellow', 'mgTouchReverse']) {
     assert.match(html, new RegExp(`id="${id}"`));
   }
-  assert.match(html, /aria-label="发射紫球"/);
-  assert.match(html, /aria-label="发射黄球"/);
-  assert.match(html, /aria-label="反向球体"/);
+  assert.match(html, /aria-label="选择并发射紫球"/);
+  assert.match(html, /aria-label="选择并发射黄球"/);
+  assert.match(html, /aria-label="让已发射球反向"/);
   assert.match(css, /\.mg-touch-controls\.is-visible/);
   assert.match(css, /min-width:\s*72px/);
   assert.match(css, /min-height:\s*72px/);
@@ -124,7 +124,7 @@ test('pointer lifecycle updates joystick and releases it on cancel', () => {
 test('binding touch controls repeatedly does not duplicate reverse actions', () => {
   const { minigame, nodes } = loadMinigameWithTouchDom();
   let reverseCount = 0;
-  minigame._reverseOrbs = () => { reverseCount += 1; };
+  minigame._handleOrbAction = () => { reverseCount += 1; };
   minigame._bindTouchInputs();
   minigame._bindTouchInputs();
   nodes.mgTouchReverse.emit('click', { preventDefault() {} });

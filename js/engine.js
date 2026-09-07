@@ -39,6 +39,7 @@ const Engine = {
       layerProposal: $("layerProposal"), ringWrap: $("ringWrap"), proposalText: $("proposalText"),
       proposalBtns: $("proposalBtns"), btnAccept: $("btnAccept"), btnReject: $("btnReject"), rejectTip: $("rejectTip"),
       layerEnding: $("layerEnding"), endingBig: $("endingBig"), endingSub: $("endingSub"), endingMeta: $("endingMeta"), endingRestart: $("endingRestart"),
+      endingConfirm: $("endingConfirm"), endingConfirmYes: $("endingConfirmYes"), endingConfirmNo: $("endingConfirmNo"),
       layerStart: $("layerStart"), startTitle: $("startTitle"), startSub: $("startSub"), startBtn: $("startBtn"),
       layerError: $("layerError"), errorText: $("errorText"), errorReload: $("errorReload"),
     };
@@ -82,6 +83,7 @@ const Engine = {
     });
 
     if (this.dom.errorReload) this.dom.errorReload.addEventListener("click", () => location.reload());
+    this._bindEndingControls();
 
     // 输入路由
     this._bindInputs();
@@ -705,15 +707,47 @@ const Engine = {
       this.dom.layerEnding.classList.add("is-show");
       this._startParticles("sakura");
       this.state = "ended";
-      // 任意键重新开始
-      const restart = () => {
-        location.reload();
-      };
-      setTimeout(() => {
-        document.addEventListener("keydown", restart, { once: true });
-        document.addEventListener("click", restart, { once: true });
-      }, 2000);
     }, 2500);
+  },
+
+  _bindEndingControls() {
+    const restart = this.dom.endingRestart;
+    const confirm = this.dom.endingConfirm;
+    const yes = this.dom.endingConfirmYes;
+    const no = this.dom.endingConfirmNo;
+    if (!restart || !confirm || !yes || !no || restart.__endingBound) return;
+    restart.__endingBound = true;
+    restart.addEventListener("click", (event) => {
+      if (event && event.stopPropagation) event.stopPropagation();
+      this._showRestartPrompt();
+    });
+    yes.addEventListener("click", (event) => {
+      if (event && event.stopPropagation) event.stopPropagation();
+      this._hideRestartPrompt();
+      this._reload();
+    });
+    no.addEventListener("click", (event) => {
+      if (event && event.stopPropagation) event.stopPropagation();
+      this._hideRestartPrompt();
+    });
+  },
+
+  _showRestartPrompt() {
+    const confirm = this.dom.endingConfirm;
+    if (!confirm) return;
+    confirm.hidden = false;
+    if (confirm.classList) confirm.classList.add("is-show");
+  },
+
+  _hideRestartPrompt() {
+    const confirm = this.dom.endingConfirm;
+    if (!confirm) return;
+    confirm.hidden = true;
+    if (confirm.classList) confirm.classList.remove("is-show");
+  },
+
+  _reload() {
+    if (typeof location !== "undefined" && typeof location.reload === "function") location.reload();
   },
 
   // ============ 输入路由 ============

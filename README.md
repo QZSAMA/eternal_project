@@ -102,8 +102,8 @@ meta: {
 ```js
 minigame: {
   duration: 60,        // 时长（秒）
-  winHealCount: 1,     // 奶到小美几次后通关
-  meiHP: 100,          // 小美血量
+  winHealCount: 1,     // 奶到雾子几次后通关
+  kirikoHP: 100,       // 雾子血量
   enemySpawnInterval: 2200, // 敌人生成间隔（ms）
   // ...更多参数见文件注释
 }

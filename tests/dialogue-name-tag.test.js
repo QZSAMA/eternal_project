@@ -18,3 +18,9 @@ test('dialogue text leaves room for the in-box name tag', () => {
   assert.ok(Number(padding[1]) >= 70,
     'top padding must keep dialogue text below the full-height name tag');
 });
+
+test('full heroine name stays readable inside the clipped dialogue shape', () => {
+  assert.match(nameTagRule, /white-space:\s*nowrap/);
+  assert.match(nameTagRule, /max-width:\s*calc\(100%\s*-\s*96px\)/);
+  assert.match(nameTagRule, /overflow:\s*visible/);
+});

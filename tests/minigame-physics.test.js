@@ -55,13 +55,13 @@ test('3d player movement is stable across frame rates', () => {
   const makeSimulation = () => {
     const minigame = loadMinigame();
     minigame.mode = 'three';
-    minigame.cfg = { duration: 90, playerSpeed: 4, meiDistance: 80, fireRate: 400, enemySpawnInterval: 2200, enemyMax: 5 };
+    minigame.cfg = { duration: 90, playerSpeed: 4, kirikoDistance: 80, fireRate: 400, enemySpawnInterval: 2200, enemyMax: 5, kirikoHP: 100, enemyHP: 30, enemyDamage: 8, purpleDamage: 30, yellowHeal: 40, winHealCount: 1 };
     minigame.startTime = 0;
     minigame.lastSpawn = 0;
     minigame.lastShot = 0;
     minigame.ended = false;
     minigame.player = { position: { x: 0, y: 0, z: 0 }, rotation: {}, facing: 0 };
-    minigame.mei = { position: { x: 0, y: 0, z: 0 }, rotation: {}, hp: 100 };
+    minigame.kiriko = { position: { x: 0, y: 0, z: 0 }, rotation: {}, hp: 100 };
     minigame.camera = { position: {}, lookAt() {} };
     minigame.enemies = [];
     minigame.orbs = [];
@@ -86,4 +86,48 @@ test('effect collection trimming removes oldest entries at the cap', () => {
   minigame._trimEffectCollection(collection, 2, item => removed.push(item));
   assert.deepEqual(collection, ['newest']);
   assert.deepEqual(removed, ['oldest']);
+});
+
+test('orb selection defaults to yellow and cycles left/right between yellow and purple', () => {
+  const minigame = loadMinigame();
+  minigame.resetSelection();
+  assert.equal(minigame.selectedOrbType, 'yellow');
+  minigame._cycleOrbType(1);
+  assert.equal(minigame.selectedOrbType, 'purple');
+  minigame._cycleOrbType(1);
+  assert.equal(minigame.selectedOrbType, 'yellow');
+  minigame._cycleOrbType(-1);
+  assert.equal(minigame.selectedOrbType, 'purple');
+});
+
+test('E enters selection when no orb is active and reverses only active orbs', () => {
+  const minigame = loadMinigame();
+  minigame.resetSelection();
+  minigame._handleOrbAction();
+  assert.equal(minigame.orbSelectionMode, true);
+  minigame.orbs = [{ reversed: false, mesh: { position: { x: 0, y: 1, z: 0 } }, vx: 1, vy: 0, vz: 0 }];
+  minigame._handleOrbAction();
+  assert.equal(minigame.orbSelectionMode, false);
+  assert.equal(minigame.orbs[0].reversed, true);
+  assert.equal(minigame.orbs[0].vx, -1);
+});
+
+test('arena reflection reverses a moving orb at the configured boundary', () => {
+  const minigame = loadMinigame();
+  const orb = { mesh: { position: { x: 10, z: 0 } }, vx: 2, vz: 0 };
+  assert.equal(minigame._reflectOrbAtBounds(orb, 10), true);
+  assert.equal(orb.vx, -2);
+});
+
+test('left click cannot fire until selection mode is entered', () => {
+  const minigame = loadMinigame();
+  minigame.mode = '2d';
+  minigame.fallbackState = { orbs: [] };
+  let fired = 0;
+  minigame._fireOrb2D = () => { fired += 1; };
+  assert.equal(minigame._fireSelectedOrb(), false);
+  assert.equal(fired, 0);
+  minigame._handleOrbAction();
+  assert.equal(minigame._fireSelectedOrb(), true);
+  assert.equal(fired, 1);
 });
