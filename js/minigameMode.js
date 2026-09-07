@@ -4,7 +4,6 @@
   else root.MinigameMode = factory();
 }(typeof self !== 'undefined' ? self : this, function () {
   function chooseMinigameMode({ threeAvailable = false, webglAvailable = false, fallbackAvailable = true } = {}) {
-    if (threeAvailable && webglAvailable) return 'three';
     if (fallbackAvailable) return '2d';
     return 'skip';
   }

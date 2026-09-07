@@ -5,7 +5,7 @@
 }(typeof self !== 'undefined' ? self : this, function () {
   const COMMANDS = new Set([
     'scene', 'show', 'hide', 'say', 'menu', 'jump', 'call',
-    'wait', 'bgm', 'sfx', 'effect', 'montage', 'proposal',
+    'wait', 'bgm', 'sfx', 'effect', 'montage', 'memory', 'proposal',
   ]);
   const POSITIONS = new Set(['left', 'center', 'right']);
 
@@ -110,6 +110,9 @@
               const match = typeof key === 'string' && (key.startsWith('assets/') ? photos.includes(key) || key : photos[Number(key.replace('photo', '')) - 1]);
               if (!match) errors.push(`${location}.montage.slides[${slideIndex}] references an unknown photo`);
             });
+            break;
+          case 'memory':
+            if (arg !== null && !isRecord(arg)) errors.push(`${location}.memory must be an object`);
             break;
           case 'proposal':
             if (arg !== null && !isRecord(arg)) errors.push(`${location}.proposal must be an object`);

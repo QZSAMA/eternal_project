@@ -12,17 +12,17 @@
 | 生产预览 | `https://qzsama.github.io/eternal_project/` |
 | 基线提交 | 发布提交以 `main` 与 GitHub Pages 部署记录为准 |
 | 运行方式 | 静态文件；发布前用 `python -m http.server 4173` 预览并做断网 smoke；`file://` 仅作便利入口；`main` 通过 Actions 发布到 GitHub Pages |
-| 运行时依赖 | 原生 JS/Web Audio/Canvas + 本地 `vendor/three-r160.min.js`；无运行时网络依赖 |
+| 运行时依赖 | 原生 JS/Web Audio/Canvas；无第三方运行时和网络依赖 |
 | 测试现状 | Node 内置测试与静态检查作为发布门禁；主线、触屏小游戏和 2D/skip fallback 使用静默 Chromium smoke 验证；Pages 发布契约已覆盖 |
 | 资产现状 | 21 个图片文件，约 8.14 MB；BGM 默认显式空值，静默运行且不发起音频请求 |
-| 主要风险 | 角色 JPG 带背景/水印且授权待确认；Three.js classic build 有弃用警告；低端设备仍需实机帧率验收 |
+| 主要风险 | 角色 JPG 带背景/水印且授权待确认；低端设备仍需实机帧率验收 |
 
 ## 2026-09-07 当前功能基线
 
 - 开场文案固定为“大龄游戏宅, 喜欢玩OW”与“戳戳,🙋‍♀️”；女主游戏角色统一为雾子，当前运行时与可编辑脚本不再使用小美/冰墙设定。
 - 结尾层不会自动重启；点击“重新开始”先打开确认对话框，取消后继续停留在结尾画面。
-- 小游戏输入契约统一为：E 进入选球、A/D 或左右方向键切换黄球/紫球、左键发射、再次 E 反转在途球；触屏按钮直接选择并发射或执行回头；Three.js 与 2D fallback 共用状态规则。
-- Three.js 主模式使用本地 vendored r160 与原创程序化训练场：四面低墙、三组掩体、发光边界和信标，不下载或复制官方地图/模型/贴图；2D/skip fallback 保留。
+- 小游戏输入契约统一为：X 或“我需要治疗”按钮请求治疗；活动紫球转黄球，黄球命中雾子后回满血；Escape/“跳过”保留为 skip fallback。
+- 小游戏只使用 Canvas 2D，角色贴图从 `images.minigame` 本地槽位加载，失败时回退到几何占位；不再加载 Three.js。
 - 球体越过训练场边界会被夹回并反射速度；所有可见真名使用完整“朱盈畅”，对话标签与小游戏 reveal 均禁止截断。
 
 ## 产品意图
@@ -33,13 +33,13 @@
 
 | 模块 | 文件 | 责任 | 对外依赖 |
 |---|---|---|---|
-| 入口/布局 | `index.html` | DOM 层级、脚本加载、固定舞台、本地脚本顺序 | 本地 Three.js、浏览器 API |
+| 入口/布局 | `index.html` | DOM 层级、脚本加载、固定舞台、本地脚本顺序 | 浏览器 API |
 | 剧情引擎 | `js/engine.js` | label/pc 状态机、指令解释、输入路由、场景和求婚 UI、角色槽位 latest-write-wins、静音同步、可暂停蒙太奇生命周期 | `CONFIG`、`GameAudio`、`Minigame` |
 | 剧情数据 | `js/storyData.js` | 元数据、资源路径、指令数组、小游戏参数 | 无 |
 | 音频 | `js/audio.js` | BGM 淡入淡出、SFX、Web Audio 合成兜底 | Audio/AudioContext |
 | 配置校验 | `js/configValidation.js` | meta、资源引用、label/指令契约校验 | `CONFIG` 数据 |
-| 模式选择 | `js/minigameMode.js` | 纯函数选择 Three.js / 2D / skip | 无 |
-| 小游戏 | `js/minigame.js` | Three.js 主渲染、Canvas 2D 兼容渲染、触屏输入、skip、结束回调 | 全局 `THREE`、DOM、`GameAudio` |
+| 模式选择 | `js/minigameMode.js` | 纯函数选择 2D / skip | 无 |
+| 小游戏 | `js/minigame.js` | Canvas 2D 渲染、X 治疗输入、skip、结束回调 | DOM、`GameAudio` |
 | 样式 | `css/style.css` | 1920×1080 舞台、层级、动画、主题 | CSS/浏览器渲染 |
 | 资产 | `assets/images/**` | 背景、角色、照片、球纹理 | 图片解码/GPU |
 
@@ -50,12 +50,13 @@ idle --start--> playing
 playing --say--> waiting_input --advance--> playing
 playing --menu--> waiting_choice --choose--> playing
 playing --call--> in_minigame --onEnd--> playing
+playing --memory--> in_memory --但是…--> in_proposal
 playing --montage--> in_montage --pause/resume--> in_montage --onDone--> playing
 playing --proposal--> in_proposal --accept--> ended
 playing --script end--> ended
 ```
 
-主线标签：`start → group_night → branch → gaming|first_date → from_game_to_real → montage → proposal`。
+主线标签：`start → relationship → dates → confession → memories → proposal`。
 
 ## 配置契约
 
@@ -92,7 +93,27 @@ playing --script end--> ended
 
 ## 下次审查触发器
 
+## 2026-09-07 决策补充
+
+- 女生第一人称线性剧情：`start → relationship → dates → confession → memories → proposal`，移除旧分支选择卡片。
+- 回忆由 `memoryBubbles` 自动轮播，点击“但是…”只执行一次并显示求婚句。
+- 小游戏为 Canvas 2D-only：X/按钮请求治疗，紫球转黄球，黄球命中雾子后回满血；Canvas 不可用时 skip。
+- `vendor/three-r160.min.js` 已删除；真实照片和角色贴图需经过授权、隐私和尺寸复查。
+
 - 修改 `index.html` 脚本来源或 `js/minigame.js` 渲染器。
 - 增加/删除故事 label 或指令。
 - 替换角色、照片、音频格式或资产目录。
 - 发布给现场使用前，至少执行一次无网络浏览器 smoke。
+
+## 2026-09-07 线性剧情与 2D 治疗小游戏
+
+- 已将主线改为女生第一人称：`start → relationship → dates → confession → memories → proposal`，移除旧 `branch`、`gaming`、`first_date` 分支和二选一卡片。
+- 回忆使用 `memoryBubbles` 配置，Engine 通过单一 timer 自动循环照片泡泡；“但是…”按钮只执行一次，显示 `proposalCopy` 后进入求婚层。照片路径仍为本地占位槽位，后续可替换为已获授权真实照片。
+- 小游戏改为 Canvas 2D-only：莫伊拉自动生成并反弹紫球；雾子初始残血；按 `X` 或 `#mgNeedHealing` 请求治疗，活动紫球及后续投掷均转为黄球，黄球命中雾子后回满血并结束；Canvas 不可用时保留 `skip`。
+- 已删除不再被入口引用的 `vendor/three-r160.min.js`，运行时依赖降为原生 JS/Web Audio/Canvas。
+- Node 测试与语法检查已通过；Python Playwright smoke 已更新但当前执行环境缺少 `playwright` 模块，需在具备该依赖的验收环境重新运行。
+
+### 新复查触发器
+
+- 替换真实照片或角色贴图时，检查授权、尺寸、隐私和本地路径。
+- 调整 `memoryBubbleInterval`、治疗按钮文案或小游戏碰撞半径时，重新运行 Node 测试和浏览器 smoke。

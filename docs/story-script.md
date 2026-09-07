@@ -1,5 +1,7 @@
 # 《我们的故事》完整文案脚本
 
+> 当前版本采用女生第一人称线性叙事：`start → relationship → dates → confession → memories → proposal`。不再提供“再来一局 / 约出去见面”的选择卡片。`memories` 使用 `memoryBubbles` 自动轮播照片，右下角“但是…”按钮显示“但是，他想继续和你创造更多回忆，所以——Will you marry me?”。
+
 > 这是一份面向文案编辑的 Markdown 稿，内容当前同步自 [`js/storyData.js`](../js/storyData.js)。
 >
 > 修改这里的文字后，不会自动改变游戏；确认文案后，再将修改同步回 `js/storyData.js`，并运行 `npm test` 与 `npm run check`。

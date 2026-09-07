@@ -17,6 +17,19 @@ test('story uses the requested Xiaohongshu note and comment and Kiriko role', ()
   assert.doesNotMatch(story, /小美|冰墙/);
 });
 
+test('story is a linear female-viewpoint memory timeline', () => {
+  assert.match(story, /女生视角|我看见|我记得|我和他/);
+  assert.match(story, /守望先锋线下展览/);
+  assert.match(story, /演唱会重放/);
+  assert.match(story, /脱口秀/);
+  assert.match(story, /X118/);
+  assert.match(story, /2025[年年\-./ ]+5月?20日|2025-05-20/);
+  assert.match(story, /情书/);
+  assert.match(story, /Will you marry me\?/i);
+  assert.doesNotMatch(story, /branch\s*:|再来一局.*见一面|见一面.*再来一局/);
+  assert.match(story, /memoryBubbles\s*:/);
+});
+
 test('all visible heroine names keep the full 朱盈畅 spelling', () => {
   assert.match(story, /realHeroineName:\s*"朱盈畅"/);
   assert.doesNotMatch(minigame, /朱盈(?!畅)/);
@@ -31,17 +44,15 @@ test('ending markup exposes an explicit restart confirmation', () => {
 });
 
 test('orb controls expose selectable yellow and purple actions', () => {
-  assert.match(html, /id="mgTouchSelectYellow"/);
-  assert.match(html, /id="mgTouchSelectPurple"/);
-  assert.match(minigame, /selectedOrbType/);
-  assert.match(minigame, /KeyA|ArrowLeft/);
-  assert.match(minigame, /KeyD|ArrowRight/);
-  assert.match(minigame, /_reverseOrbs\(\)/);
+  assert.match(html, /id="mgNeedHealing"/);
+  assert.match(minigame, /requestHealing/);
+  assert.match(minigame, /_convertPurpleOrbsToYellow/);
+  assert.doesNotMatch(minigame, /selectedOrbType/);
 });
 
-test('three mode exposes an original training arena without remote assets', () => {
-  assert.match(minigame, /_buildTrainingArena/);
-  assert.match(minigame, /BoxGeometry/);
-  assert.match(minigame, /arenaHalfSize/);
+test('minigame is 2d-only and keeps skip fallback without remote assets', () => {
+  assert.match(minigame, /mode:\s*"2d"/);
+  assert.doesNotMatch(minigame, /new THREE\.|WebGLRenderer|BoxGeometry/);
+  assert.match(minigame, /mode\s*===\s*["']skip["']/);
   assert.doesNotMatch(minigame, /https?:\/\//);
 });

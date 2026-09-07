@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>我们的故事</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23f6c85f'/%3E%3Cpath d='M32 46S14 36 14 24c0-6 4-10 10-10 4 0 7 2 8 6 1-4 4-6 8-6 6 0 10 4 10 10 0 12-18 22-18 22Z' fill='%23fff'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="css/style.css?v=5">
+  <link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body>
   <!-- 1920×1080 固定舞台，等比缩放适配投屏 -->
@@ -55,7 +55,20 @@
       <button class="hud-btn" id="muteBtn" title="静音切换" aria-label="静音切换" aria-pressed="false">♪</button>
     </div>
 
-    <!-- 蒙太奇层 -->
+    <!-- 回忆泡泡层：自动轮播，不提供回忆选择 -->
+    <div class="layer-memory" id="layerMemory" aria-live="polite">
+      <div class="memory-bubble" id="memoryBubble">
+        <div class="memory-photo" id="memoryPhoto" role="img" aria-label="回忆照片"></div>
+        <div class="memory-copy">
+          <div class="memory-meta" id="memoryMeta"></div>
+          <div class="memory-caption" id="memoryCaption"></div>
+        </div>
+      </div>
+      <button class="memory-but" id="memoryBut" type="button">但是…</button>
+      <div class="memory-final" id="memoryFinal" role="status" aria-live="assertive"></div>
+    </div>
+
+    <!-- 兼容旧脚本的蒙太奇层（新剧情不再调用） -->
     <div class="layer-montage" id="layerMontage">
       <div class="montage-img" id="montageImg"></div>
       <div class="montage-caption" id="montageCaption"></div>
@@ -68,7 +81,7 @@
     <!-- 小游戏层：逆转的奶 -->
     <div class="layer-minigame" id="layerMinigame">
       <div class="mg-wrap">
-        <canvas id="minigameCanvas" width="1280" height="720" role="application" aria-label="逆转的奶小游戏：使用 WASD 移动，鼠标发射球，按 E 反向球体"></canvas>
+        <canvas id="minigameCanvas" width="1280" height="720" role="application" aria-label="我需要治疗：观察莫伊拉的紫球，按 X 请求治疗"></canvas>
         <div class="mg-hud">
           <div class="mg-hp-bar"><div class="mg-hp-fill" id="mgHpFill"></div></div>
           <div class="mg-hp-label">雾子血量</div>
@@ -76,23 +89,10 @@
           <div class="mg-floats" id="mgFloats"></div>
           <div class="mg-result" id="mgResult" role="status" aria-live="polite"></div>
         </div>
-        <div class="mg-orb-select" id="mgOrbSelect" role="status" aria-live="polite" aria-atomic="true">
-          <span class="mg-orb-option mg-orb-option--yellow" id="mgOrbYellow">黄球 · 治疗</span>
-          <span class="mg-orb-option mg-orb-option--purple" id="mgOrbPurple">紫球 · 伤害</span>
-          <span class="mg-orb-status" id="mgOrbStatus">按 E 选择球体</span>
-        </div>
-        <div class="mg-touch-controls" id="mgTouchControls" aria-label="触屏操作">
-          <div class="mg-joystick touch-control" id="mgJoystick" role="application" aria-label="移动和瞄准">
-            <span class="mg-joystick-knob" id="mgJoystickKnob" aria-hidden="true"></span>
-          </div>
-          <div class="mg-touch-actions">
-            <button class="mg-touch-btn touch-control" id="mgTouchSelectYellow" type="button" aria-label="选择并发射黄球">黄球</button>
-            <button class="mg-touch-btn touch-control" id="mgTouchSelectPurple" type="button" aria-label="选择并发射紫球">紫球</button>
-            <button class="mg-touch-btn touch-control" id="mgTouchReverse" type="button" aria-label="让已发射球反向">回头</button>
-          </div>
-        </div>
+        <button class="mg-heal-btn" id="mgNeedHealing" type="button">X&nbsp; 我需要治疗</button>
+        <div class="mg-voice-status" id="mgVoiceStatus" role="status" aria-live="polite"></div>
         <button class="mg-skip" id="mgSkip" type="button" aria-label="跳过小游戏">跳过 ▶</button>
-        <div class="mg-hint" id="mgHint">按 E 选球 · A/D 切换 · 左键发射 · 再按 E 让球回头</div>
+        <div class="mg-hint" id="mgHint">莫伊拉正在投掷紫球 · 按 X 或点击“我需要治疗”</div>
       </div>
     </div>
 
@@ -177,15 +177,12 @@
 
   </main>
 
-  <!-- Three.js 3D 引擎（本地 vendored，断网可用） -->
-  <script src="vendor/three-r160.min.js"></script>
-
-  <!-- 加载顺序：数据 → 音频 → 小游戏 → 引擎 -->
-  <script src="js/storyData.js?v=5"></script>
+  <!-- 加载顺序：数据 → 音频 → 小游戏 → 引擎（全部本地） -->
+  <script src="js/storyData.js?v=6"></script>
   <script src="js/configValidation.js?v=1"></script>
   <script src="js/minigameMode.js?v=1"></script>
   <script src="js/audio.js?v=4"></script>
-  <script src="js/minigame.js?v=5"></script>
-  <script src="js/engine.js?v=5"></script>
+  <script src="js/minigame.js?v=6"></script>
+  <script src="js/engine.js?v=6"></script>
 </body>
 </html>

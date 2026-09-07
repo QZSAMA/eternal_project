@@ -2,8 +2,8 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { chooseMinigameMode, canCreateWebGL, mapPointerToCanvas } = require('../js/minigameMode.js');
 
-test('uses Three.js when it is available and WebGL can be created', () => {
-  assert.equal(chooseMinigameMode({ threeAvailable: true, webglAvailable: true }), 'three');
+test('uses Canvas 2D as the only primary mode', () => {
+  assert.equal(chooseMinigameMode({ threeAvailable: true, webglAvailable: true }), '2d');
 });
 
 test('uses the 2D fallback when WebGL is unavailable', () => {

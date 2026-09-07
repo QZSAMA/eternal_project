@@ -51,32 +51,21 @@ test('collision distance compares the horizontal plane without allocations', () 
   assert.ok(minigame._distanceSquaredXZ({ x: 1.2, z: 0 }, { x: 0, z: 0 }) > 1);
 });
 
-test('3d player movement is stable across frame rates', () => {
-  const makeSimulation = () => {
-    const minigame = loadMinigame();
-    minigame.mode = 'three';
-    minigame.cfg = { duration: 90, playerSpeed: 4, kirikoDistance: 80, fireRate: 400, enemySpawnInterval: 2200, enemyMax: 5, kirikoHP: 100, enemyHP: 30, enemyDamage: 8, purpleDamage: 30, yellowHeal: 40, winHealCount: 1 };
-    minigame.startTime = 0;
-    minigame.lastSpawn = 0;
-    minigame.lastShot = 0;
-    minigame.ended = false;
-    minigame.player = { position: { x: 0, y: 0, z: 0 }, rotation: {}, facing: 0 };
-    minigame.kiriko = { position: { x: 0, y: 0, z: 0 }, rotation: {}, hp: 100 };
-    minigame.camera = { position: {}, lookAt() {} };
-    minigame.enemies = [];
-    minigame.orbs = [];
-    minigame.trails = [];
-    minigame.particles = [];
-    minigame._readMoveVector = () => ({ mx: 1, my: 0 });
-    minigame._readAimVector = () => ({ x: 1, y: 0, active: true });
-    return minigame;
-  };
-  const sixty = makeSimulation();
-  const thirty = makeSimulation();
-  for (let i = 0; i < 60; i++) sixty._update(1000 / 60, 1000);
-  for (let i = 0; i < 30; i++) thirty._update(1000 / 30, 1000);
-  assert.ok(Math.abs(sixty.player.position.x - thirty.player.position.x) < 0.0001);
-  assert.ok(Math.abs(sixty.player.position.x - 14.4) < 0.0001);
+test('healing request converts every active purple orb and is idempotent', () => {
+  const minigame = loadMinigame();
+  minigame.mode = '2d';
+  minigame.fallbackState = { orbs: [{ type: 'purple', vx: 1, vy: 0 }, { type: 'purple', vx: -1, vy: 0 }] };
+  assert.equal(minigame.requestHealing(), true);
+  assert.deepEqual(minigame.fallbackState.orbs.map(orb => orb.type), ['yellow', 'yellow']);
+  assert.equal(minigame.requestHealing(), false);
+});
+
+test('yellow orb collision restores kiriko to full health', () => {
+  const minigame = loadMinigame();
+  minigame.cfg = { kirikoHP: 100 };
+  minigame.kiriko = { hp: 18 };
+  assert.equal(minigame._healKiriko(), true);
+  assert.equal(minigame.kiriko.hp, 100);
 });
 
 test('effect collection trimming removes oldest entries at the cap', () => {
@@ -88,46 +77,16 @@ test('effect collection trimming removes oldest entries at the cap', () => {
   assert.deepEqual(removed, ['oldest']);
 });
 
-test('orb selection defaults to yellow and cycles left/right between yellow and purple', () => {
+test('2d arena reflection reverses a moving orb at the configured boundary', () => {
   const minigame = loadMinigame();
-  minigame.resetSelection();
-  assert.equal(minigame.selectedOrbType, 'yellow');
-  minigame._cycleOrbType(1);
-  assert.equal(minigame.selectedOrbType, 'purple');
-  minigame._cycleOrbType(1);
-  assert.equal(minigame.selectedOrbType, 'yellow');
-  minigame._cycleOrbType(-1);
-  assert.equal(minigame.selectedOrbType, 'purple');
-});
-
-test('E enters selection when no orb is active and reverses only active orbs', () => {
-  const minigame = loadMinigame();
-  minigame.resetSelection();
-  minigame._handleOrbAction();
-  assert.equal(minigame.orbSelectionMode, true);
-  minigame.orbs = [{ reversed: false, mesh: { position: { x: 0, y: 1, z: 0 } }, vx: 1, vy: 0, vz: 0 }];
-  minigame._handleOrbAction();
-  assert.equal(minigame.orbSelectionMode, false);
-  assert.equal(minigame.orbs[0].reversed, true);
-  assert.equal(minigame.orbs[0].vx, -1);
-});
-
-test('arena reflection reverses a moving orb at the configured boundary', () => {
-  const minigame = loadMinigame();
-  const orb = { mesh: { position: { x: 10, z: 0 } }, vx: 2, vz: 0 };
-  assert.equal(minigame._reflectOrbAtBounds(orb, 10), true);
+  const orb = { x: 10, y: 50, vx: 2, vy: 0 };
+  assert.equal(minigame._reflectOrb2D(orb, 10, 100, 10, 100), true);
   assert.equal(orb.vx, -2);
 });
 
-test('left click cannot fire until selection mode is entered', () => {
+test('X healing request is the only orb action and does not expose selection APIs', () => {
   const minigame = loadMinigame();
-  minigame.mode = '2d';
   minigame.fallbackState = { orbs: [] };
-  let fired = 0;
-  minigame._fireOrb2D = () => { fired += 1; };
-  assert.equal(minigame._fireSelectedOrb(), false);
-  assert.equal(fired, 0);
-  minigame._handleOrbAction();
-  assert.equal(minigame._fireSelectedOrb(), true);
-  assert.equal(fired, 1);
+  assert.equal(typeof minigame.requestHealing, 'function');
+  assert.equal('selectedOrbType' in minigame, false);
 });

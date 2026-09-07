@@ -4,7 +4,7 @@
    ============================================ */
 
 const Engine = {
-  state: "idle",      // idle/playing/waiting_input/waiting_choice/in_minigame/in_montage/in_proposal/ended
+  state: "idle",      // idle/playing/waiting_input/waiting_choice/in_minigame/in_memory/in_montage/in_proposal/ended
   label: "start",
   pc: 0,
   data: null,
@@ -17,6 +17,7 @@ const Engine = {
   rejectEscapeCount: 0,
   proposalTipTimer: null,
   montage: null,
+  memory: null,
   particleRAF: null,
   particles: [],
 
@@ -35,6 +36,8 @@ const Engine = {
       muteBtn: $("muteBtn"), startMuteBtn: $("startMuteBtn"),
       layerMontage: $("layerMontage"), montageImg: $("montageImg"), montageCaption: $("montageCaption"),
       montageToggle: $("montageToggle"), montageStatus: $("montageStatus"),
+      layerMemory: $("layerMemory"), memoryBubble: $("memoryBubble"), memoryPhoto: $("memoryPhoto"),
+      memoryCaption: $("memoryCaption"), memoryMeta: $("memoryMeta"), memoryBut: $("memoryBut"), memoryFinal: $("memoryFinal"),
       layerMinigame: $("layerMinigame"),
       layerProposal: $("layerProposal"), ringWrap: $("ringWrap"), proposalText: $("proposalText"),
       proposalBtns: $("proposalBtns"), btnAccept: $("btnAccept"), btnReject: $("btnReject"), rejectTip: $("rejectTip"),
@@ -72,6 +75,12 @@ const Engine = {
       this.dom.montageToggle.addEventListener("click", (event) => {
         if (event && event.stopPropagation) event.stopPropagation();
         this._toggleMontagePause();
+      });
+    }
+    if (this.dom.memoryBut) {
+      this.dom.memoryBut.addEventListener("click", (event) => {
+        if (event && event.stopPropagation) event.stopPropagation();
+        this.finishMemoryBubbles();
       });
     }
 
@@ -139,6 +148,8 @@ const Engine = {
       ...(cfg && typeof cfg === "object" ? cfg : {}),
       realHeroName: this.data.meta.realHeroName || this.data.meta.heroName,
       realHeroineName: this.data.meta.realHeroineName || this.data.meta.heroineName,
+      kiriko: this.data.images?.minigame?.kiriko || "",
+      moira: this.data.images?.minigame?.moira || "",
     };
     try {
       Minigame.start(gameCfg, (result) => {
@@ -182,6 +193,7 @@ const Engine = {
       case "sfx": GameAudio.sfx(arg.name); this.pc++; this._next(); break;
       case "effect": this._effect(arg); this.pc++; this._next(); break;
       case "montage": this._montage(arg); break; // 阻塞
+      case "memory": this.startMemoryBubbles(this.data.memoryBubbles || []); break; // 阻塞
       case "proposal": this._proposal(); break;  // 阻塞（终态）
       default: this._fail(`未知剧情指令：${key}（${this.label}[${this.pc}]）`); break;
     }
@@ -470,6 +482,90 @@ const Engine = {
     }
   },
 
+  // ============ memory bubbles ==========
+  startMemoryBubbles(bubbles) {
+    this.dom = this.dom || {};
+    ["layerMemory", "memoryBubble", "memoryPhoto", "memoryCaption", "memoryMeta", "memoryBut", "memoryFinal", "dialogueBox"].forEach(id => { if (!this.dom[id] && typeof document !== "undefined" && document.getElementById) this.dom[id] = document.getElementById(id); });
+    this._clearMemoryTimer();
+    const list = Array.isArray(bubbles) ? bubbles.filter(Boolean) : [];
+    this.state = "in_memory";
+    if (this.dom.dialogueBox && this.dom.dialogueBox.classList) this.dom.dialogueBox.classList.remove("is-show");
+    if (this.dom.layerMemory) {
+      this.dom.layerMemory.style.display = "flex";
+      this.dom.layerMemory.classList.add("is-show");
+    }
+    if (this.dom.memoryFinal) {
+      this.dom.memoryFinal.textContent = "";
+      this.dom.memoryFinal.classList.remove("is-show");
+    }
+    this.memory = { bubbles: list, index: 0, timerId: null, finished: false };
+    if (!list.length) { this.finishMemoryBubbles(); return; }
+    this._renderMemoryBubble(0);
+    this._scheduleMemoryBubble();
+  },
+
+  _clearMemoryTimer() {
+    if (this.memory && this.memory.timerId != null) clearTimeout(this.memory.timerId);
+    if (this.memory) this.memory.timerId = null;
+  },
+
+  _scheduleMemoryBubble() {
+    const session = this.memory;
+    if (!session || session.finished || this.state !== "in_memory") return;
+    this._clearMemoryTimer();
+    const interval = Number(this.data && this.data.memoryBubbleInterval) || 3500;
+    session.timerId = setTimeout(() => {
+      if (this.memory !== session || session.finished || this.state !== "in_memory") return;
+      session.index = (session.index + 1) % session.bubbles.length;
+      this._renderMemoryBubble(session.index);
+      this._scheduleMemoryBubble();
+    }, interval);
+  },
+
+  _renderMemoryBubble(index) {
+    const session = this.memory;
+    if (!session || !session.bubbles[index]) return;
+    const bubble = session.bubbles[index];
+    const photo = this._photoPath(bubble.photo || bubble.img || "");
+    if (this.dom.memoryPhoto) {
+      this.dom.memoryPhoto.style.backgroundImage = photo ? `url(${photo})` : "none";
+      this.dom.memoryPhoto.setAttribute?.("aria-label", bubble.meta || "回忆照片");
+      this.dom.memoryPhoto.classList.remove("is-visible");
+      requestAnimationFrame(() => this.dom.memoryPhoto && this.dom.memoryPhoto.classList.add("is-visible"));
+    }
+    if (this.dom.memoryCaption) this.dom.memoryCaption.textContent = String(bubble.caption || "").replace(/[{}]/g, "");
+    if (this.dom.memoryMeta) this.dom.memoryMeta.textContent = String(bubble.meta || "").replace(/[{}]/g, "");
+    if (this.dom.memoryBubble) {
+      this.dom.memoryBubble.classList.remove("is-pop");
+      requestAnimationFrame(() => this.dom.memoryBubble && this.dom.memoryBubble.classList.add("is-pop"));
+    }
+  },
+
+  finishMemoryBubbles() {
+    const session = this.memory;
+    if (session && session.finished) return;
+    this._clearMemoryTimer();
+    if (session) session.finished = true;
+    this.state = "in_proposal";
+    if (this.dom.memoryBut) this.dom.memoryBut.disabled = true;
+    if (this.dom.memoryFinal) {
+      const copy = (this.data && this.data.meta && this.data.meta.proposalCopy) || "但是，他想继续和你创造更多回忆，所以——Will you marry me?";
+      this.dom.memoryFinal.textContent = copy.replace(/[{}]/g, "");
+      this.dom.memoryFinal.classList.add("is-show");
+    }
+    if (this.dom.memoryBubble) this.dom.memoryBubble.classList.remove("is-pop");
+    // 让求婚句先完整停留片刻，再进入正式求婚层；无脚本的单元测试则停在文案状态。
+    if (this.data && this.data.story) {
+      setTimeout(() => {
+        if (!this.memory || !this.memory.finished) return;
+        if (this.dom.layerMemory) { this.dom.layerMemory.classList.remove("is-show"); this.dom.layerMemory.style.display = "none"; }
+        this.state = "playing";
+        this.pc++;
+        this._next();
+      }, 1400);
+    }
+  },
+
   // ============ montage ============
   _montage(arg) {
     this._clearMontageTimers();
@@ -635,7 +731,7 @@ const Engine = {
     // key 可能是 "photo1" 或完整路径
     if (key.startsWith("assets/")) return key;
     const idx = parseInt(key.replace("photo", "")) - 1;
-    return this.data.images.photos[idx] || "";
+    return (this.data && this.data.images && Array.isArray(this.data.images.photos) && this.data.images.photos[idx]) || "";
   },
 
   _probePhotos() {

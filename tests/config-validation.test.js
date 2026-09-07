@@ -34,6 +34,13 @@ test('accepts a config whose story references existing labels and assets', () =>
   assert.deepEqual(result.errors, []);
 });
 
+test('accepts the linear memory instruction', () => {
+  const value = config();
+  value.story.start[3] = { memory: {} };
+  const result = validateConfig(value);
+  assert.equal(result.ok, true);
+});
+
 test('rejects an unknown jump label with instruction location', () => {
   const value = config();
   value.story.start[3].jump.label = 'missing';
