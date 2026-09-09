@@ -457,14 +457,10 @@ html,body{
   transition:opacity 2000ms cubic-bezier(.2,.8,.3,1),transform 2000ms cubic-bezier(.2,.8,.3,1);
 }
 .ring-wrap.is-show{opacity:1;transform:translateY(0) scale(1);}
-.ring{animation:ringSpin 4000ms linear infinite;filter:drop-shadow(0 0 24px rgba(255,215,0,.6));}
-@keyframes ringSpin{
-  0%{transform:rotate(0deg);}
-  100%{transform:rotate(360deg);}
-}
+.ring{position:relative;z-index:1;display:block;filter:drop-shadow(0 0 12px rgba(184,225,255,.35));}
 .ring-glow{
-  position:absolute;inset:-40px;border-radius:50%;
-  background:radial-gradient(circle,rgba(255,215,0,.4) 0%,transparent 70%);
+  position:absolute;inset:-20px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,rgba(183,223,255,.18) 0%,transparent 68%);
   animation:glowPulse 2500ms ease-in-out infinite;
 }
 @keyframes glowPulse{

@@ -99,26 +99,38 @@
     <!-- 求婚层 -->
     <div class="layer-proposal" id="layerProposal">
       <div class="ring-wrap" id="ringWrap">
-        <svg class="ring" viewBox="0 0 200 200" width="280" height="280">
+        <svg class="ring" viewBox="0 0 240 260" width="280" height="280" aria-hidden="true" focusable="false">
           <defs>
-            <radialGradient id="ringGrad" cx="50%" cy="40%" r="60%">
-              <stop offset="0%" stop-color="#FFF8E0"/>
-              <stop offset="55%" stop-color="#FFD700"/>
-              <stop offset="100%" stop-color="#B8860B"/>
-            </radialGradient>
-            <linearGradient id="ringShine" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stop-color="#fff" stop-opacity="0.9"/>
-              <stop offset="50%" stop-color="#fff" stop-opacity="0.2"/>
-              <stop offset="100%" stop-color="#fff" stop-opacity="0"/>
+            <linearGradient id="ringPlatinum" x1="0%" y1="0%" x2="100%" y2="75%">
+              <stop offset="0%" stop-color="#637c96"/>
+              <stop offset="24%" stop-color="#f5fcff"/>
+              <stop offset="43%" stop-color="#98b3c8"/>
+              <stop offset="67%" stop-color="#ffffff"/>
+              <stop offset="85%" stop-color="#8299af"/>
+              <stop offset="100%" stop-color="#d7e9f4"/>
             </linearGradient>
           </defs>
-          <circle cx="100" cy="100" r="68" fill="none" stroke="url(#ringGrad)" stroke-width="14"/>
-          <circle cx="100" cy="100" r="68" fill="none" stroke="url(#ringShine)" stroke-width="6" opacity="0.7"/>
-          <circle cx="100" cy="42" r="14" fill="url(#ringGrad)"/>
-          <polygon points="100,28 108,42 100,56 92,42" fill="#FFF8E0" opacity="0.9"/>
-          <polygon points="78,42 100,32 122,42 100,52" fill="#FFFFFF" opacity="0.5"/>
+          <ellipse cx="120" cy="163" rx="64" ry="72" fill="none" stroke="#344b63" stroke-width="18"/>
+          <ellipse cx="120" cy="160" rx="64" ry="72" fill="none" stroke="url(#ringPlatinum)" stroke-width="12"/>
+          <path d="M65 188 A60 68 0 0 0 164 207" fill="none" stroke="#fff" stroke-width="2" opacity=".8"/>
+          <!-- Raised shoulders and four prongs support the faceted solitaire. -->
+          <path d="M66 118 L90 85 M174 118 L150 85 M99 100 L109 120 L131 120 L141 100" fill="none" stroke="url(#ringPlatinum)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+          <g class="diamond" stroke="#eafaff" stroke-width="1.2" stroke-linejoin="round">
+            <path d="M76 62 L95 37 H145 L164 62 L120 116 Z" fill="#b4ddec"/>
+            <path d="M95 37 L105 62 H135 L145 37 Z" fill="#fff"/>
+            <path d="M76 62 L95 37 L105 62 Z" fill="#d8f5ff"/>
+            <path d="M135 62 L145 37 L164 62 Z" fill="#8dbcd5"/>
+            <path d="M76 62 H105 L120 116 Z" fill="#77adc9"/>
+            <path d="M105 62 H135 L120 116 Z" fill="#f4fdff"/>
+            <path d="M135 62 H164 L120 116 Z" fill="#bde9fa"/>
+          </g>
+          <path d="M78 60 L86 71 M162 60 L154 71 M101 99 L108 108 M139 99 L132 108" fill="none" stroke="url(#ringPlatinum)" stroke-width="5" stroke-linecap="round"/>
+          <g fill="#fff">
+            <path d="M172 27 L175 38 L186 41 L175 44 L172 55 L169 44 L158 41 L169 38 Z"/>
+            <path d="M66 76 L68 83 L75 85 L68 87 L66 94 L64 87 L57 85 L64 83 Z" opacity=".8"/>
+          </g>
         </svg>
-        <div class="ring-glow" id="ringGlow"></div>
+        <div class="ring-glow" id="ringGlow" aria-hidden="true"></div>
       </div>
       <div class="proposal-text" id="proposalText" aria-live="assertive"></div>
       <div class="proposal-btns" id="proposalBtns">
