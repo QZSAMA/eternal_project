@@ -72,12 +72,12 @@ const CONFIG = {
       { say: { who: "narration", text: "我收下了花，也收下了这份认真。那天，我们正式在一起。" } },
       { say: { who: "narration", text: "我们一起看了电影《情书》。后来又去了好多地方，看了好多场演唱会，创造了很多有意义、很开心的回忆。" } }, { jump: { label: "memories" } },
     ],
-    memories: [{ memory: {} }, { jump: { label: "proposal" } }],
+    memories: [{ memory: {} }],
     proposal: [
       { scene: { bg: "proposal", effect: "zoomin" } }, { hide: { char: "*" } }, { bgm: { track: "proposal", fade: 2000 } },
-      { say: { who: "narration", text: "我以为故事会停在那些照片里，可他还准备了一句话。" } }, { effect: { type: "spotlight" } },
+      { effect: { type: "spotlight" } },
       { show: { char: "hero", pos: "center", expr: "serious" } },
-      { say: { who: "hero", name: "赵启志", text: "朱盈畅，他想继续和你创造更多回忆，所以——" } }, { proposal: {} },
+      { proposal: {} },
     ],
   },
 };
