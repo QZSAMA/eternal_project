@@ -4,10 +4,10 @@ def advance_until(page, target, timeout=45000):
     deadline = page.evaluate("Date.now()") + timeout
     while page.evaluate("Date.now()") < deadline:
         state = page.evaluate("Engine.state")
-        if state == "in_minigame":
-            page.locator("#mgSkip").click(force=True)
-        elif state == target:
+        if state == target:
             return
+        elif state == "in_minigame":
+            page.locator("#mgSkip").click(force=True)
         elif state == "waiting_input":
             page.mouse.click(960, 540)
         elif state in ("error", "ended"):
@@ -28,8 +28,14 @@ def run_route(page):
     page.wait_for_timeout(3600)
     assert page.locator("#memoryCaption").inner_text() != first
     page.locator("#memoryBut").click()
-    assert "Will you marry me?" in page.locator("#memoryFinal").inner_text()
+    assert page.locator("#memoryFinal").inner_text() == ""
+    assert "Will you marry me?" in page.locator("#proposalText").inner_text()
+    assert page.locator("#proposalText").inner_text().count("Will you marry me?") == 1
     advance_until(page, "in_proposal", timeout=5000)
+    assert not page.locator("#ringWrap").evaluate("node => node.classList.contains('is-show')")
+    page.wait_for_timeout(650)
+    assert page.locator("#ringWrap").evaluate("node => node.classList.contains('is-show')")
+    assert "Will you marry me?" in page.locator("#proposalText").inner_text()
 
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(headless=True, args=["--mute-audio", "--disable-audio-output"])

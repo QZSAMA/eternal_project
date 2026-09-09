@@ -43,6 +43,13 @@ test('ending markup exposes an explicit restart confirmation', () => {
   assert.doesNotMatch(engine, /document\.addEventListener\("keydown", restart/);
 });
 
+test('proposal copy is rendered once after memories and the old duplicate prompt is removed', () => {
+  assert.doesNotMatch(story, /朱盈畅，他想继续和你创造更多回忆，所以——/);
+  assert.doesNotMatch(html, />嫁给我，好吗？</);
+  assert.match(engine, /proposalText\.textContent = copy/);
+  assert.match(engine, /memoryFinal\.textContent = ""/);
+});
+
 test('orb controls expose selectable yellow and purple actions', () => {
   assert.match(html, /id="mgNeedHealing"/);
   assert.match(minigame, /requestHealing/);

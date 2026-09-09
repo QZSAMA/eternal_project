@@ -50,7 +50,7 @@ idle --start--> playing
 playing --say--> waiting_input --advance--> playing
 playing --menu--> waiting_choice --choose--> playing
 playing --call--> in_minigame --onEnd--> playing
-playing --memory--> in_memory --但是…--> in_proposal
+playing --memory--> in_memory --但是…--> playing(proposal setup) --proposal--> in_proposal
 playing --montage--> in_montage --pause/resume--> in_montage --onDone--> playing
 playing --proposal--> in_proposal --accept--> ended
 playing --script end--> ended
@@ -97,6 +97,7 @@ playing --script end--> ended
 
 - 女生第一人称线性剧情：`start → relationship → dates → confession → memories → proposal`，移除旧分支选择卡片。
 - 回忆由 `memoryBubbles` 自动轮播，点击“但是…”只执行一次并显示求婚句。
+- 求婚句只由 `#proposalText` 渲染一次；`#memoryFinal` 在结束轮播时保持隐藏，避免回忆层与求婚层重复显示。文案先停留，戒指延迟约 500ms 开始 2 秒渐显，随后才显示回应按钮。
 - 小游戏为 Canvas 2D-only：X/按钮请求治疗，紫球转黄球，黄球命中雾子后回满血；Canvas 不可用时 skip。
 - `vendor/three-r160.min.js` 已删除；真实照片和角色贴图需经过授权、隐私和尺寸复查。
 
@@ -117,3 +118,4 @@ playing --script end--> ended
 
 - 替换真实照片或角色贴图时，检查授权、尺寸、隐私和本地路径。
 - 调整 `memoryBubbleInterval`、治疗按钮文案或小游戏碰撞半径时，重新运行 Node 测试和浏览器 smoke。
+- 调整 `proposalCopy`、求婚层 DOM 或戒指显现节奏时，重新运行 `tests/engine-memory-bubbles.test.js` 与 `tests/smoke-relationship-ux.py`，确认没有第二个求婚句。

@@ -546,24 +546,25 @@ const Engine = {
     if (session && session.finished) return;
     this._clearMemoryTimer();
     if (session) session.finished = true;
-    this.state = "in_proposal";
     if (this.dom.memoryBut) this.dom.memoryBut.disabled = true;
     if (this.dom.memoryFinal) {
-      const copy = (this.data && this.data.meta && this.data.meta.proposalCopy) || "但是，他想继续和你创造更多回忆，所以——Will you marry me?";
-      this.dom.memoryFinal.textContent = copy.replace(/[{}]/g, "");
-      this.dom.memoryFinal.classList.add("is-show");
+      // 求婚文案只由正式求婚层渲染，避免回忆层和求婚层各出现一次。
+      this.dom.memoryFinal.textContent = "";
+      this.dom.memoryFinal.classList.remove("is-show");
     }
     if (this.dom.memoryBubble) this.dom.memoryBubble.classList.remove("is-pop");
-    // 让求婚句先完整停留片刻，再进入正式求婚层；无脚本的单元测试则停在文案状态。
-    if (this.data && this.data.story) {
-      setTimeout(() => {
-        if (!this.memory || !this.memory.finished) return;
-        if (this.dom.layerMemory) { this.dom.layerMemory.classList.remove("is-show"); this.dom.layerMemory.style.display = "none"; }
-        this.state = "playing";
-        this.pc++;
-        this._next();
-      }, 1400);
+    if (this.dom.layerMemory) { this.dom.layerMemory.classList.remove("is-show"); this.dom.layerMemory.style.display = "none"; }
+
+    // 有完整剧情脚本时先执行求婚场景布置，再进入唯一的求婚文案与戒指渐显。
+    const proposalScript = this.data && this.data.story && this.data.story.proposal;
+    if (Array.isArray(proposalScript) && proposalScript.length) {
+      this.state = "playing";
+      this.label = "proposal";
+      this.pc = 0;
+      this._next();
+      return;
     }
+    this._proposal();
   },
 
   // ============ montage ============
@@ -749,12 +750,17 @@ const Engine = {
     this.dom.dialogueBox.classList.remove("is-show");
     this.dom.effectSpotlight.classList.add("is-on");
     this.dom.layerProposal.classList.add("is-show");
+    const copy = (this.data && this.data.meta && this.data.meta.proposalCopy) || "但是，他想继续和你创造更多回忆，所以——Will you marry me?";
+    this.dom.proposalText.textContent = copy.replace(/[{}]/g, "");
+    this.dom.proposalText.classList.add("is-show");
+    this.dom.ringWrap.classList.remove("is-show");
+    this.dom.proposalBtns.classList.remove("is-show");
     this.dom.btnReject.style.transform = "";
     this.dom.btnReject.textContent = "让我想想…";
     this.dom.btnReject.setAttribute("aria-pressed", "false");
 
+    // 文案停留在当前画面，戒指随后用自身的 2 秒过渡缓缓显现。
     setTimeout(() => this.dom.ringWrap.classList.add("is-show"), 500);
-    setTimeout(() => this.dom.proposalText.classList.add("is-show"), 2200);
     setTimeout(() => {
       this.dom.proposalBtns.classList.add("is-show");
       this._startRejectEscape();
