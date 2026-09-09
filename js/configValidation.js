@@ -19,6 +19,13 @@
     if (!isRecord(config)) return { ok: false, errors: ['config must be an object'], audioPaths };
 
     if (!isRecord(config.meta)) errors.push('meta must be an object');
+    else {
+      for (const field of ['proposalCopy', 'endingTitle', 'endingSubtitle', 'endingContinuation']) {
+        if (config.meta[field] !== undefined && typeof config.meta[field] !== 'string') {
+          errors.push(`meta.${field} must be a string`);
+        }
+      }
+    }
     if (!isRecord(config.images)) errors.push('images must be an object');
     if (!isRecord(config.story) || Object.keys(config.story).length === 0) {
       errors.push('story must contain at least one label');

@@ -4,7 +4,10 @@ const CONFIG = {
     title: "我们的故事", heroName: "QzSama", heroineName: "可乐就是好喝",
     realHeroName: "赵启志", realHeroineName: "朱盈畅", proposalDate: "2025.05.20",
     endingLine: "Chapter 1 完 / 我们的故事，才刚刚开始",
-    proposalCopy: "但是，他想继续和你创造更多回忆，所以——Will you marry me?",
+    proposalCopy: "但是，\n他还想和你一起，创造更多美好的回忆。\nSo… Will you marry me?",
+    endingTitle: "SHE SAID YES !!",
+    endingSubtitle: "她说好！",
+    endingContinuation: "つづく\n未完待续",
   },
   audio: {
     bgm: { opening: "", game: "", date: "", proposal: "" },

@@ -41,6 +41,16 @@ test('accepts the linear memory instruction', () => {
   assert.equal(result.ok, true);
 });
 
+test('rejects non-text proposal and ending copy before rendering', () => {
+  for (const field of ['proposalCopy', 'endingTitle', 'endingSubtitle', 'endingContinuation']) {
+    const value = config();
+    value.meta[field] = { text: 'invalid' };
+    const result = validateConfig(value);
+    assert.equal(result.ok, false, field);
+    assert.ok(result.errors.some(error => error.includes(`meta.${field}`)));
+  }
+});
+
 test('rejects an unknown jump label with instruction location', () => {
   const value = config();
   value.story.start[3].jump.label = 'missing';

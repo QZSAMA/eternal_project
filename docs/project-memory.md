@@ -116,6 +116,9 @@ playing --script end--> ended
 
 ### 新复查触发器
 
+- 2026-09-09 求婚文案固定分三段，以“但是，”起笔、“So… Will you marry me?”收尾；CSS 保留配置里的换行。接受后的主标题为大字 `SHE SAID YES !!`，中文“她说好！”降为副标题，舞台右下角显示两行“つづく / 未完待续”。新增的结尾字段来自 `CONFIG.meta`，配置校验拒绝非字符串值。
+- `tests/smoke-proposal-layout.py` 覆盖桌面、横屏手机、竖屏低动效的求婚/结尾边界、接受操作与取消重启；截图输出在 `output/proposal-layout/`。
+
 - 替换真实照片或角色贴图时，检查授权、尺寸、隐私和本地路径。
 - 调整 `memoryBubbleInterval`、治疗按钮文案或小游戏碰撞半径时，重新运行 Node 测试和浏览器 smoke。
 - 调整 `proposalCopy`、求婚层 DOM 或戒指显现节奏时，重新运行 `tests/engine-memory-bubbles.test.js` 与 `tests/smoke-relationship-ux.py`，确认没有第二个求婚句。

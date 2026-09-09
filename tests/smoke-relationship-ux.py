@@ -1,4 +1,5 @@
 from playwright.sync_api import sync_playwright
+import os
 
 def advance_until(page, target, timeout=45000):
     deadline = page.evaluate("Date.now()") + timeout
@@ -16,7 +17,7 @@ def advance_until(page, target, timeout=45000):
     raise AssertionError(f"route did not reach {target}")
 
 def run_route(page):
-    page.goto("http://127.0.0.1:18080/index.html", wait_until="networkidle")
+    page.goto(os.environ.get("ETERNAL_TEST_URL", "http://127.0.0.1:18080/index.html"), wait_until="networkidle")
     page.locator("#startBtn").click()
     page.evaluate("Engine.state = 'playing'; Engine.jump('relationship');")
     advance_until(page, "in_minigame")

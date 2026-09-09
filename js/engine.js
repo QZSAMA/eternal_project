@@ -42,6 +42,7 @@ const Engine = {
       layerProposal: $("layerProposal"), ringWrap: $("ringWrap"), proposalText: $("proposalText"),
       proposalBtns: $("proposalBtns"), btnAccept: $("btnAccept"), btnReject: $("btnReject"), rejectTip: $("rejectTip"),
       layerEnding: $("layerEnding"), endingBig: $("endingBig"), endingSub: $("endingSub"), endingMeta: $("endingMeta"), endingRestart: $("endingRestart"),
+      endingContinuation: $("endingContinuation"),
       endingConfirm: $("endingConfirm"), endingConfirmYes: $("endingConfirmYes"), endingConfirmNo: $("endingConfirmNo"),
       layerStart: $("layerStart"), startTitle: $("startTitle"), startSub: $("startSub"), startBtn: $("startBtn"),
       layerError: $("layerError"), errorText: $("errorText"), errorReload: $("errorReload"),
@@ -58,6 +59,9 @@ const Engine = {
 
     // 填充标题
     this.dom.startTitle.textContent = data.meta.title.replace(/[{}]/g, "");
+    this.dom.endingBig.textContent = data.meta.endingTitle || "";
+    this.dom.endingSub.textContent = data.meta.endingSubtitle || "";
+    this.dom.endingContinuation.textContent = data.meta.endingContinuation || "";
     this.dom.endingMeta.textContent = `${data.meta.endingLine.replace(/[{}]/g, "")}\n${data.meta.proposalDate.replace(/[{}]/g, "")}`;
 
     // 静音按钮（开始页和 HUD 共用同一状态）
@@ -750,7 +754,7 @@ const Engine = {
     this.dom.dialogueBox.classList.remove("is-show");
     this.dom.effectSpotlight.classList.add("is-on");
     this.dom.layerProposal.classList.add("is-show");
-    const copy = (this.data && this.data.meta && this.data.meta.proposalCopy) || "但是，他想继续和你创造更多回忆，所以——Will you marry me?";
+    const copy = (this.data && this.data.meta && this.data.meta.proposalCopy) || "";
     this.dom.proposalText.textContent = copy.replace(/[{}]/g, "");
     this.dom.proposalText.classList.add("is-show");
     this.dom.ringWrap.classList.remove("is-show");
