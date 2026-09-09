@@ -79,7 +79,7 @@ const CONFIG = {
     proposal: [
       { scene: { bg: "proposal", effect: "zoomin" } }, { hide: { char: "*" } }, { bgm: { track: "proposal", fade: 2000 } },
       { effect: { type: "spotlight" } },
-      { show: { char: "hero", pos: "center", expr: "serious" } },
+      { show: { char: "hero", pos: "left", expr: "serious" } },
       { proposal: {} },
     ],
   },

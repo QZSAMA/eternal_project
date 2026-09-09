@@ -448,7 +448,8 @@ html,body{
    ============================================ */
 .layer-proposal{
   display:none;align-items:center;justify-content:center;flex-direction:column;
-  background:transparent;
+  padding:40px 60px 40px 840px;
+  background:linear-gradient(90deg,transparent 36%,rgba(5,12,26,.72) 48%,rgba(5,12,26,.86));
 }
 .layer-proposal.is-show{display:flex;}
 .ring-wrap{
@@ -471,14 +472,14 @@ html,body{
   50%{opacity:1;transform:scale(1.15);}
 }
 .proposal-text{
-  margin-top:40px;max-width:1720px;font-size:64px;font-weight:700;letter-spacing:2px;
-  white-space:pre-line;text-align:center;line-height:1.65;
-  color:var(--gold);text-shadow:0 0 30px rgba(255,215,0,.6);
+  margin-top:24px;width:100%;font-size:46px;font-weight:500;letter-spacing:0;
+  white-space:pre-line;text-align:center;line-height:1.9;
+  color:#fff0ce;text-shadow:0 2px 16px rgba(0,0,0,.55);
   opacity:0;transition:opacity 800ms ease-out;
 }
 .proposal-text.is-show{opacity:1;}
 .proposal-btns{
-  margin-top:60px;display:flex;flex-direction:column;align-items:center;gap:24px;
+  margin-top:40px;display:flex;flex-direction:column;align-items:center;gap:24px;
   opacity:0;transition:opacity 800ms ease-out;
 }
 .proposal-btns.is-show{opacity:1;}
@@ -500,7 +501,7 @@ html,body{
   transition:transform 200ms ease-out,background-color 200ms ease-out,border-color 200ms ease-out,color 200ms ease-out;
 }
 .reject-tip{
-  position:absolute;left:50%;bottom:120px;transform:translateX(-50%);
+  position:absolute;left:840px;right:60px;bottom:24px;
   font-size:22px;color:var(--ow-cyan);font-style:italic;
   opacity:0;transition:opacity 400ms;max-width:800px;text-align:center;
 }

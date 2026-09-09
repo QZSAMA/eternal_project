@@ -29,6 +29,11 @@ with sync_playwright() as p:
             return box
         for selector in ['#ringWrap', '#proposalText', '#proposalBtns']:
             inside(selector)
+        portrait = page.locator('.char-slot.is-show .char-img').bounding_box()
+        assert portrait, 'proposal portrait must remain visible'
+        for selector in ['#ringWrap', '#proposalText', '#proposalBtns']:
+            box = page.locator(selector).bounding_box()
+            assert portrait['x'] + portrait['width'] < box['x'], f'{selector} overlaps the portrait'
         page.screenshot(path=str(OUTPUT / f'proposal-{width}.png'))
         # The acceptance button intentionally pulses; click its visible center.
         accept = page.locator('#btnAccept').bounding_box()
